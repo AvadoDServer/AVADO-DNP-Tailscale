@@ -271,7 +271,7 @@ export class Tailscale {
   shareMcp(on: boolean): Promise<void> {
     return this.serial(async () => {
       const c = commands(this.config);
-      if (on) await this.run(c.serveOn, "share AI Connect in your tailnet");
+      if (on) await this.run(c.serveOn, "share AI Connect with your Tailscale devices");
       else {
         // switching Serve off also ends Funnel for that port
         await this.run(c.funnelOff, "stop sharing on the internet").catch(() => {});
@@ -287,7 +287,7 @@ export class Tailscale {
       else {
         await this.run(c.funnelOff, "stop sharing on the internet");
         // keep AI Connect in the tailnet
-        await this.run(c.serveOn, "share AI Connect in your tailnet");
+        await this.run(c.serveOn, "share AI Connect with your Tailscale devices");
       }
     });
   }
