@@ -47,8 +47,12 @@ The step-by-step guide on the page (plain words, links straight to the right con
 2. **DNS** → *Add nameserver* → *Custom* → `172.33.1.2`, *Restrict to domain* `my.ava.do` (split DNS).
 3. **Machines** → the AVADO → ⋯ → *Disable key expiry* (otherwise Tailscale logs the box out after
    a few months; the page shows the date).
-4. Install Tailscale on the phone or laptop, same account, switch it on (Linux: `--accept-routes`).
+4. Install Tailscale on the phone or laptop, same account, switch it on (Linux: `tailscale set --accept-routes`).
 5. Open `http://my.ava.do`.
+
+**Who can reach the box:** every device in the owner's Tailscale account (Tailscale's default
+access rule lets all of them reach approved routes), the same as a device on the home network; the
+page says so and asks the owner to add only their own devices and not share the AVADO in Tailscale.
 
 **Two AVADOs in one account** offer the same network and only one can be used at a time (DAppNode
 documents the same). The page warns when another device already serves `172.33.0.0/16` and names it.

@@ -116,13 +116,17 @@
             <li>
               <strong>On your phone or laptop:</strong> install the Tailscale app from
               <a href="https://tailscale.com/download" target="_blank" rel="noopener noreferrer">tailscale.com/download</a>, log in with the same
-              account and switch it on. (On a Linux computer, also allow subnet routes: <span class="mono">tailscale up --accept-routes</span>.)
+              account and switch it on. (On a Linux computer, also allow subnet routes: <span class="mono">tailscale set --accept-routes</span>.)
             </li>
             <li>
               <strong>Open <span class="mono">http://my.ava.do</span></strong> in the browser. Your apps open the same way as at home, for example
               <span class="mono">http://tailscale.my.ava.do</span>.
             </li>
           </ol>
+          <p class="muted small">
+            <strong>Who can open it?</strong> Every device in your Tailscale account, the same as a device on your home network. Only add your own
+            devices, and do not share this AVADO with other people in Tailscale.
+          </p>
           <p class="muted small">
             <strong>Two AVADOs in one Tailscale account?</strong> Both offer the same network, so only one of them can be opened through Tailscale at a
             time. Switch this off on the AVADO you do not need from afar (or untick its route in Edit route settings).
