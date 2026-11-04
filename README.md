@@ -130,10 +130,11 @@ Like DAppNode's package, the app runs Tailscale's own container start program (`
 
 ### Installer field
 
-The manifest has `"setupFields"` for `TS_AUTHKEY` (title "Tailscale auth key", one line, link to the
-keys page). The current Admin installer (10.0.68) shows no environment fields at all; the install
-call already sends `userSetEnvs`. Until the Admin shows the field, the key goes on the app's page
-(step 1), or in the Admin under the app → Settings → Environment variables (Advanced mode).
+The manifest has a `"setupWizard"` field for `TS_AUTHKEY`, in the same format as DAppNode's
+`setup-wizard.yml` (version 2: `id`, `target` type `environment`, `title`, `description`, `secret`,
+`required`). The AVADO Admin from 10.0.70 shows it on the install page as a masked input with a
+Show button (Simple and Advanced mode) and sends it with the install call (`userSetEnvs`). With an
+older Admin, or when it is left empty, the key goes on the app's page (step 1).
 
 ### What comes from DAppNode
 

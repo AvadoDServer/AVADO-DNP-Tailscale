@@ -32,14 +32,20 @@
     "OnboardingWizard": "http://tailscale.my.ava.do",
     "HomePage": "https://tailscale.com"
   },
-  "setupFields": [
-    {
-      "env": "TS_AUTHKEY",
-      "title": "Tailscale auth key",
-      "description": "Create a reusable key at Tailscale → Settings → Keys and paste it here.",
-      "link": "https://login.tailscale.com/admin/settings/keys",
-      "secret": true,
-      "required": false
-    }
-  ]
+  "setupWizard": {
+    "version": "2",
+    "fields": [
+      {
+        "id": "TS_AUTHKEY",
+        "target": {
+          "type": "environment",
+          "name": "TS_AUTHKEY"
+        },
+        "title": "Tailscale auth key",
+        "description": "Make a reusable key in your [Tailscale settings](https://login.tailscale.com/admin/settings/keys) and paste it here. You can also leave it empty and sign in on the app's page later.",
+        "secret": true,
+        "required": false
+      }
+    ]
+  }
 }
