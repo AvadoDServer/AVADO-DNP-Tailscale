@@ -5,6 +5,7 @@
   "description": "Reach your AVADO from your phone or laptop wherever you are, with your own free Tailscale account. Open the AVADO Admin and your apps from anywhere, and let your AI assistant reach AVADO AI Connect. AVADO Remote Access keeps working as before. Optional and off by default: share AI Connect on the internet for ChatGPT.",
   "shortDescription": "Free private remote access with your own Tailscale account",
   "type": "service",
+  "avadocategory": "thelab",
   "autoupdate": true,
   "image": {
     "volumes": [
