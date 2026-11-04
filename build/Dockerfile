@@ -4,9 +4,9 @@
 # dockerfile "build/Dockerfile"), so the image can read the package version
 # from dappnode_package.json. See /.dockerignore for what is sent.
 #
-# tailscale and tailscaled are the official static binaries, copied from the
-# official image pinned by digest. They run on the same node:22 base as the
-# AVADO Care and AI Connect packages (shared layers on the box).
+# containerboot, tailscale and tailscaled are the official static binaries,
+# copied from the official image pinned by digest. They run on the same node:22
+# base as the AVADO Care and AI Connect packages (shared layers on the box).
 
 # Base images, pinned by digest (the multi-arch index digest). The tag is only
 # a label; the digest decides. Update tag and digest together: get the digest
@@ -30,24 +30,20 @@ RUN yarn build \
     && mkdir -p /out \
     && cp -a package.json dist public node_modules /out/
 
-########## Port 80 without root (same as AVADO Care)
-FROM --platform=linux/amd64 ${NODE_SLIM_IMAGE} AS caps
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends libcap2-bin \
-    && rm -rf /var/lib/apt/lists/* \
-    && setcap cap_net_bind_service=+ep /usr/local/bin/node \
-    && getcap /usr/local/bin/node | grep -q cap_net_bind_service
-
 ########## Runtime
+# Kernel mode, set up like DAppNode's Tailscale package: Tailscale's containerboot runs tailscaled
+# with /dev/net/tun (mounted by the manifest) and NET_ADMIN. The iptables tools are for
+# TS_DEBUG_FIREWALL_MODE=auto (tailscaled may pick iptables or nftables); all of it happens inside
+# this container's own network, never on the box.
 FROM --platform=linux/amd64 ${NODE_SLIM_IMAGE}
 
-COPY --from=caps /usr/local/bin/node /usr/local/bin/node
-COPY --from=tailscale /usr/local/bin/tailscale /usr/local/bin/tailscaled /usr/local/bin/
-# tailscaled checks certificates of Tailscale's servers with the system roots
+COPY --from=tailscale /usr/local/bin/containerboot /usr/local/bin/tailscale /usr/local/bin/tailscaled /usr/local/bin/
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+    && apt-get install -y --no-install-recommends ca-certificates iptables \
+    && rm -rf /var/lib/apt/lists/* \
+    && command -v setpriv
 COPY --from=service /out /usr/src/service
+COPY build/start.sh /usr/local/bin/avado-tailscale-start
 
 COPY dappnode_package.json /tmp/dappnode_package.json
 RUN node -e 'const v = require("/tmp/dappnode_package.json").version; \
@@ -57,16 +53,24 @@ RUN node -e 'const v = require("/tmp/dappnode_package.json").version; \
     && test -f /usr/src/service/dist/server.js \
     && test -f /usr/src/service/public/index.html \
     && tailscale version \
-    && mkdir -p /data && chown node:node /data
+    && test -x /usr/local/bin/containerboot && test -x /usr/local/bin/avado-tailscale-start
 
-# No root and no privileges: tailscaled runs with userspace networking (no
-# /dev/net/tun, no routes or firewall rules on the box); node may bind port 80.
-USER node
-ENV NODE_OPTIONS=--max-old-space-size=96 \
+# containerboot settings, as in DAppNode's package. TS_AUTHKEY, TS_ROUTES, TS_EXTRA_ARGS and
+# TS_DEBUG_FIREWALL_MODE are also in the manifest, so the Admin shows them.
+ENV TS_STATE_DIR=/data/tailscale \
+    TS_SOCKET=/var/run/tailscale/tailscaled.sock \
+    TS_USERSPACE=false \
+    TS_AUTH_ONCE=true \
+    TS_BOOT_TIMEOUT=1h \
+    TS_DEBUG_FIREWALL_MODE=auto \
+    TS_HOSTNAME=avado \
+    TS_ROUTES=172.33.0.0/16 \
+    TS_EXTRA_ARGS=--advertise-exit-node \
+    NODE_OPTIONS=--max-old-space-size=96 \
     NODE_ENV=production \
     STATE_DIR=/data \
     PUBLIC_DIR=/usr/src/service/public \
     PORT=80
 WORKDIR /usr/src/service
 EXPOSE 80
-CMD ["node", "dist/server.js"]
+CMD ["/usr/local/bin/avado-tailscale-start"]

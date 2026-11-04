@@ -1,17 +1,14 @@
 /**
- * Runs tailscaled and drives it with the tailscale CLI. Every command line is fixed here: the page
- * only chooses on/off (and may hand over an auth key, which goes to tailscale in a file, never on
- * the command line), nothing else from a request is ever passed to a command.
- *
- * tailscaled runs with userspace networking: no /dev/net/tun, no privileges, no routes or
- * firewall rules on the box. It still works as a subnet router: traffic from the owner's devices
- * to the AVADO network (172.33.0.0/16) is answered by tailscaled's own network stack, which opens
- * ordinary connections from this container to the Admin, the apps and the box's DNS. ZeroTier
- * Remote Access and the box's DNS are not touched.
+ * Talks to tailscaled with the tailscale CLI. tailscaled itself is run by Tailscale's own
+ * containerboot, set up like DAppNode's package (kernel mode, TS_ROUTES, TS_EXTRA_ARGS,
+ * TS_AUTH_ONCE, state in the volume; see build/start.sh). This app reads the status for the page,
+ * logs the box in with the auth key from the installer or the page, and switches the optional
+ * AI Connect sharing (Serve/Funnel). Every command line is fixed here: nothing from a request is
+ * ever passed to a command, and an auth key goes to tailscale in a file, never on a command line.
  */
-import { execFile, spawn, type ChildProcess } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { mkdirSync, readdirSync, rmSync } from "node:fs";
+import { readdirSync, rmSync } from "node:fs";
 import { rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { Config } from "./config.js";
@@ -26,18 +23,26 @@ export interface Status {
   dnsName: string | null;
   ips: string[];
   tailnet: string | null;
-  /** The AVADO network is offered to the owner's Tailscale devices (advertised) */
+  /** The AVADO network is offered to the owner's Tailscale devices (TS_ROUTES) */
   routeOffered: boolean;
   /** ... and the owner approved it in the Tailscale admin console (this box serves it) */
   routeApproved: boolean;
   /** Another device already serves the same network (usually a second AVADO): its name. */
   routeClash: string | null;
-  /** This box offers itself as an exit node (off by default) */
+  /** This box offers itself as an exit node (TS_EXTRA_ARGS=--advertise-exit-node, like DAppNode) */
   exitNodeOffered: boolean;
   /** ... and the owner allowed it in the Tailscale admin console */
   exitNodeApproved: boolean;
   /** When the box's Tailscale login runs out (null: never, the owner switched key expiry off). */
   keyExpiry: string | null;
+  /**
+   * The box's DNS as nameserver in the owner's Tailscale settings: "global" (Override DNS servers on,
+   * DAppNode's way), "split" (restricted to my.ava.do), "not-override" (added, but Override is off,
+   * so phones keep their own DNS), "none", or null when it cannot be read.
+   */
+  dns: "global" | "split" | "not-override" | "none" | null;
+  /** Other devices in the account that are online now (the owner's phone or laptop). */
+  peersOnline: number;
   mcpShared: boolean;
   funnel: boolean;
   mcpUrl: string | null;
@@ -76,7 +81,6 @@ export function defaultDeps(config: Config): TailscaleDeps {
 const EXIT_ROUTES = ["0.0.0.0/0", "::/0"];
 
 export interface UpOptions {
-  offerRoute: boolean;
   /** A file holding an auth key: log in without the browser. */
   authKeyFile?: string;
 }
@@ -85,21 +89,21 @@ export interface UpOptions {
 export function commands(config: Config) {
   const relay = `http://127.0.0.1:${config.relayPort}`;
   return {
+    // The same settings containerboot uses (TS_ROUTES, TS_HOSTNAME, TS_EXTRA_ARGS, no tailnet DNS),
+    // so a login from the page and a restart never disagree.
     up: (o: UpOptions) => [
       "up",
       "--reset",
-      `--hostname=${config.hostname}`,
       // keep the container on the box's DNS (bind), and take no routes from other devices: a second
       // AVADO offering 172.33.0.0/16 can never pull this box's own network away from it
       "--accept-dns=false",
       "--accept-routes=false",
-      `--advertise-routes=${o.offerRoute ? config.avadoSubnet : ""}`,
-      ...(config.loginServer ? [`--login-server=${config.loginServer}`] : []),
+      `--advertise-routes=${config.routes.join(",")}`,
+      `--hostname=${config.hostname}`,
+      ...config.extraArgs,
       ...(o.authKeyFile ? [`--auth-key=file:${o.authKeyFile}`, "--timeout=90s"] : ["--timeout=600s"]),
     ],
     logout: ["logout"],
-    /** Both flags every time, so changing one never drops the other. */
-    advertise: (route: boolean, exitNode: boolean) => ["set", `--advertise-routes=${route ? config.avadoSubnet : ""}`, `--advertise-exit-node=${exitNode}`],
     serveOn: ["serve", "--bg", "--yes", "--https=443", relay],
     serveOff: ["serve", "--https=443", "off"],
     funnelOn: ["funnel", "--bg", "--yes", "--https=443", relay],
@@ -107,6 +111,7 @@ export function commands(config: Config) {
     status: ["status", "--json"],
     prefs: ["debug", "prefs"],
     serveStatus: ["serve", "status", "--json"],
+    netmap: ["debug", "netmap"],
   };
 }
 
@@ -114,6 +119,7 @@ interface TsPeer {
   HostName?: string;
   DNSName?: string;
   PrimaryRoutes?: string[] | null;
+  Online?: boolean;
 }
 
 interface TsStatus {
@@ -161,6 +167,21 @@ export function isLoginLink(url: string, loginServer: string | null): boolean {
   return u.protocol === "https:" && u.host === "login.tailscale.com" && u.pathname.startsWith("/a/") && u.pathname.length > 3;
 }
 
+type DnsResolver = { Addr?: string } | null;
+interface NetmapDns {
+  DNS?: { Resolvers?: DnsResolver[] | null; FallbackResolvers?: DnsResolver[] | null; Routes?: Record<string, DnsResolver[] | null> | null } | null;
+}
+
+/** Where the box's DNS shows up in the account's DNS settings (from `tailscale debug netmap`). */
+export function dnsSetting(netmap: NetmapDns, server: string): "global" | "split" | "not-override" | "none" {
+  const has = (list: DnsResolver[] | null | undefined) => (list ?? []).some((r) => (r?.Addr ?? "").replace(/:53$/, "") === server);
+  const dns = netmap.DNS ?? {};
+  if (has(dns.Resolvers)) return "global";
+  if (has(dns.Routes?.["my.ava.do"]) || has(dns.Routes?.["my.ava.do."])) return "split";
+  if (has(dns.FallbackResolvers)) return "not-override";
+  return "none";
+}
+
 const OWN_SERVER_NO_HTTPS =
   "Sharing AI Connect over HTTPS needs Tailscale's own servers: your own login server (TS_LOGIN_SERVER) gives no HTTPS certificates. With the AVADO network allowed, your devices reach AI Connect at http://mcp.my.ava.do:8000/mcp instead.";
 
@@ -174,13 +195,12 @@ function keyProblem(msg: string): string {
 }
 
 export class Tailscale {
-  private daemon: ChildProcess | null = null;
-  private stopping = false;
-  private backoffMs = 5_000;
   private up: { kill(): void } | null = null;
   private notice: string | null = null;
-  private routeWanted = true;
   private cache: { at: number; status: Status } | null = null;
+  private dnsCache: { at: number; value: Status["dns"] } | null = null;
+  /** since when tailscaled has not answered (it is started by containerboot next to this app) */
+  private downSince: number | null = null;
   private busy: Promise<unknown> = Promise.resolve();
 
   constructor(
@@ -190,8 +210,7 @@ export class Tailscale {
     private readonly now: () => number = Date.now,
   ) {
     if (config.authKeyInvalid) {
-      this.notice =
-        "The auth key in this app's settings (TS_AUTHKEY in the Admin) does not look like a Tailscale key. It starts with tskey-auth-. Fix it there, or use the login button below.";
+      this.notice = "The auth key you entered when installing does not look like a Tailscale key (it starts with tskey-auth-). Paste a new one in step 1.";
     }
   }
 
@@ -217,41 +236,8 @@ export class Tailscale {
     }
   }
 
-  /** Starts tailscaled and keeps it running. */
-  startDaemon(): void {
-    const dir = path.join(this.config.stateDir, "tailscale");
-    mkdirSync(dir, { recursive: true });
-    this.removeLeftoverKeys();
-    const child = spawn(this.config.tailscaledBin, ["--tun=userspace-networking", `--statedir=${dir}`, `--socket=${this.config.socket}`, "--port=41641"], {
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    this.daemon = child;
-    const forward = (buf: Buffer) => {
-      for (const line of buf.toString("utf8").split("\n")) if (line.trim()) process.stdout.write(`tailscaled: ${redact(line)}\n`);
-    };
-    child.stdout?.on("data", forward);
-    child.stderr?.on("data", forward);
-    child.on("error", (e) => this.logger.error(`cannot start tailscaled: ${errorMessage(e)}`));
-    child.on("exit", (code, signal) => {
-      this.daemon = null;
-      if (this.stopping) return;
-      this.logger.warn(`tailscaled stopped (${signal ?? code}); starting it again in ${this.backoffMs / 1000} s`);
-      setTimeout(() => this.startDaemon(), this.backoffMs).unref();
-      this.backoffMs = Math.min(this.backoffMs * 2, 60_000);
-    });
-    setTimeout(() => (this.backoffMs = 5_000), 120_000).unref();
-  }
-
-  stopDaemon(): Promise<void> {
-    this.stopping = true;
+  stop(): void {
     this.up?.kill();
-    const d = this.daemon;
-    if (!d) return Promise.resolve();
-    return new Promise((resolve) => {
-      d.once("exit", () => resolve());
-      d.kill("SIGTERM");
-      setTimeout(resolve, 4000).unref();
-    });
   }
 
   /** One change at a time. */
@@ -260,6 +246,19 @@ export class Tailscale {
     this.busy = run.catch(() => {});
     this.cache = null;
     return run;
+  }
+
+  /** The account's DNS settings, read at most every 15 seconds (the netmap is large). */
+  private async dns(): Promise<Status["dns"]> {
+    if (this.dnsCache && this.now() - this.dnsCache.at < 15_000) return this.dnsCache.value;
+    let value: Status["dns"] = null;
+    try {
+      value = dnsSetting(JSON.parse((await this.deps.exec(commands(this.config).netmap, 10_000)).stdout) as NetmapDns, this.config.dnsServer);
+    } catch {
+      value = null;
+    }
+    this.dnsCache = { at: this.now(), value };
+    return value;
   }
 
   private async prefs(): Promise<{ route: boolean; exitNode: boolean } | null> {
@@ -288,8 +287,11 @@ export class Tailscale {
       }
     }
     const backend = ts?.BackendState ?? "";
+    if (ts) this.downSince = null;
+    else this.downSince ??= this.now();
     let state: State = !ts
-      ? this.daemon
+      ? // containerboot starts tailscaled next to this app; if it does not answer for 2 minutes, say so
+        this.now() - this.downSince! < 120_000
         ? "starting"
         : "error"
       : backend === "Running"
@@ -308,10 +310,12 @@ export class Tailscale {
     const subnet = this.config.avadoSubnet;
     const routeApproved = (ts?.Self?.PrimaryRoutes ?? []).includes(subnet);
     const p = ts ? await this.prefs() : null;
-    const routeOffered = p ? p.route : this.routeWanted;
+    const routeOffered = p ? p.route : this.config.routes.includes(subnet);
     let routeClash: string | null = null;
+    let peersOnline = 0;
     for (const peer of Object.values(ts?.Peer ?? {})) {
       if ((peer.PrimaryRoutes ?? []).includes(subnet)) routeClash = (peer.DNSName || peer.HostName || "another device").split(".")[0] || "another device";
+      if (peer.Online) peersOnline += 1;
     }
 
     let mcpShared = false;
@@ -345,6 +349,8 @@ export class Tailscale {
       exitNodeOffered: p?.exitNode ?? false,
       exitNodeApproved: ts?.Self?.ExitNodeOption === true,
       keyExpiry: state === "running" && ts?.Self?.KeyExpiry ? ts.Self.KeyExpiry : null,
+      dns: state === "running" ? await this.dns() : null,
+      peersOnline: state === "running" ? peersOnline : 0,
       mcpShared,
       funnel,
       mcpUrl,
@@ -361,13 +367,16 @@ export class Tailscale {
     return status;
   }
 
-  /** Browser login: `tailscale up` prints a login link, the page shows it with a QR code. */
-  login(offerRoute = true): Promise<void> {
+  /**
+   * Browser login: `tailscale up` prints a login link, the page shows it with a QR code. (After a
+   * start, containerboot already waits for a login and the link is there by itself; this is for
+   * when it is not, e.g. after "Log out".)
+   */
+  login(): Promise<void> {
     return this.serial(async () => {
-      this.routeWanted = offerRoute;
       this.notice = null;
       this.up?.kill();
-      this.up = this.deps.spawnUp(commands(this.config).up({ offerRoute }));
+      this.up = this.deps.spawnUp(commands(this.config).up({}));
       // `tailscale up` ends by itself after 10 minutes (--timeout); forget it then
       const handle = this.up;
       setTimeout(() => {
@@ -386,19 +395,18 @@ export class Tailscale {
       this.up?.kill();
       this.up = null;
       this.notice = null;
-      this.routeWanted = true;
       const file = path.join(this.config.stateDir, `.authkey-${randomBytes(6).toString("hex")}`);
       try {
         await writeFile(file, key, { mode: 0o600 });
-        await this.deps.exec(commands(this.config).up({ offerRoute: true, authKeyFile: file }), 100_000);
+        await this.deps.exec(commands(this.config).up({ authKeyFile: file }), 100_000);
         this.logger.info(`logged in with an auth key (${from === "page" ? "from the page" : "from the app's settings"})`);
       } catch (e) {
         const why = keyProblem(errorMessage(e));
         this.logger.warn(`login with an auth key failed: ${why}`);
         this.notice =
           from === "settings"
-            ? `The auth key in this app's settings (TS_AUTHKEY in the Admin) was not accepted: ${why}. Make a new key, or use the login button below.`
-            : `That auth key was not accepted: ${why}. Make a new key, or use the login button instead.`;
+            ? `The auth key you entered when installing was not accepted: ${why}. Make a new reusable key and paste it in step 1.`
+            : `That auth key was not accepted: ${why}. Make a new reusable key and try again.`;
         throw new Error(this.notice);
       } finally {
         await rm(file, { force: true }).catch(() => {});
@@ -407,11 +415,12 @@ export class Tailscale {
   }
 
   /**
-   * TS_AUTHKEY from the app's settings, used only while the box is not logged in yet (like
-   * TS_AUTH_ONCE=true in DAppNode's package): after a restart or update the saved identity is kept
-   * and the key is not used again.
+   * TS_AUTHKEY from the installer, used only while the box is not logged in yet (TS_AUTH_ONCE, as
+   * in DAppNode's package): after a restart or update the saved identity is kept and the key is
+   * not used again. containerboot does not get the key (start.sh), so a rejected key never makes
+   * the app restart over and over, and the login link keeps working.
    */
-  async autoLogin(waitMs = 60_000): Promise<void> {
+  async autoLogin(waitMs = 120_000): Promise<void> {
     if (!this.config.authKey) return;
     const until = this.now() + waitMs;
     for (;;) {
@@ -429,21 +438,6 @@ export class Tailscale {
       this.up = null;
       this.notice = null;
       await this.run(commands(this.config).logout, "log out");
-    });
-  }
-
-  setRoute(on: boolean): Promise<void> {
-    return this.serial(async () => {
-      this.routeWanted = on;
-      const p = await this.prefs();
-      await this.run(commands(this.config).advertise(on, p?.exitNode ?? false), on ? "offer the AVADO network" : "stop offering the AVADO network");
-    });
-  }
-
-  setExitNode(on: boolean): Promise<void> {
-    return this.serial(async () => {
-      const p = await this.prefs();
-      await this.run(commands(this.config).advertise(p?.route ?? this.routeWanted, on), on ? "offer this AVADO as an exit node" : "stop offering this AVADO as an exit node");
     });
   }
 

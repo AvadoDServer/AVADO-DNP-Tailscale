@@ -8,7 +8,7 @@ import { createApp, publicStatus } from "../src/http.js";
 import { silentLogger } from "../src/log.js";
 import { createRelay, isMcpPath } from "../src/relay.js";
 import { redact } from "../src/redact.js";
-import { Tailscale, commands, isLoginLink, type TailscaleDeps } from "../src/tailscale.js";
+import { Tailscale, commands, dnsSetting, isLoginLink, type TailscaleDeps } from "../src/tailscale.js";
 
 const config = { ...loadConfig({ PACKAGE_VERSION: "0.1.0", STATE_DIR: "/tmp/avado-ts-test" }), publicDir: "public" };
 const servers: http.Server[] = [];
@@ -43,21 +43,31 @@ function fake(state: { status: unknown; serve: unknown; prefs?: unknown }) {
   return { ts: new Tailscale(config, silentLogger, deps), calls, spawned };
 }
 
-test("tailscaled settings never touch the box's DNS or take routes, and offer the AVADO network by default", () => {
-  const up = commands(config).up({ offerRoute: true });
+test("a login from the page uses the same settings as containerboot: AVADO network, exit node, no tailnet DNS, no routes taken", () => {
+  const up = commands(config).up({});
+  assert.ok(up.includes("--reset"));
   assert.ok(up.includes("--accept-dns=false"));
   assert.ok(up.includes("--accept-routes=false"));
   assert.ok(up.includes("--advertise-routes=172.33.0.0/16"));
   assert.ok(up.includes("--hostname=avado"));
-  assert.ok(commands(config).up({ offerRoute: false }).includes("--advertise-routes="));
-  assert.ok(!up.some((a) => a.includes("exit-node") || a.includes("auth-key") || a.includes("login-server")));
+  // DAppNode's default TS_EXTRA_ARGS
+  assert.ok(up.includes("--advertise-exit-node"));
+  assert.ok(!up.some((a) => a.includes("auth-key") || a.includes("login-server")));
   // the key goes to tailscale in a file, never on the command line
-  assert.ok(commands(config).up({ offerRoute: true, authKeyFile: "/data/.authkey-x" }).includes("--auth-key=file:/data/.authkey-x"));
-  const own = { ...config, loginServer: "http://172.17.0.1:18080" };
-  assert.ok(commands(own).up({ offerRoute: true }).includes("--login-server=http://172.17.0.1:18080"));
-  // changing the route or the exit node always states both, so one never drops the other
-  assert.deepEqual(commands(config).advertise(true, false), ["set", "--advertise-routes=172.33.0.0/16", "--advertise-exit-node=false"]);
-  assert.deepEqual(commands(config).advertise(false, true), ["set", "--advertise-routes=", "--advertise-exit-node=true"]);
+  assert.ok(commands(config).up({ authKeyFile: "/data/.authkey-x" }).includes("--auth-key=file:/data/.authkey-x"));
+  // an own login server (Headscale) comes from TS_EXTRA_ARGS, as with containerboot
+  const own = loadConfig({ PACKAGE_VERSION: "0", TS_EXTRA_ARGS: "--advertise-exit-node --login-server=http://172.17.0.1:18080" });
+  assert.equal(own.loginServer, "http://172.17.0.1:18080");
+  assert.ok(commands(own).up({}).includes("--login-server=http://172.17.0.1:18080"));
+  assert.equal(loadConfig({ PACKAGE_VERSION: "0", TS_EXTRA_ARGS: "--login-server http://hs:8080" }).loginServer, "http://hs:8080");
+  // the owner can empty TS_ROUTES / TS_EXTRA_ARGS in the Admin
+  const none = loadConfig({ PACKAGE_VERSION: "0", TS_ROUTES: "", TS_EXTRA_ARGS: "" });
+  assert.deepEqual(none.routes, []);
+  assert.ok(commands(none).up({}).includes("--advertise-routes="));
+  assert.ok(!commands(none).up({}).includes("--advertise-exit-node"));
+  assert.throws(() => loadConfig({ PACKAGE_VERSION: "0", TS_ROUTES: "my network" }), /TS_ROUTES/);
+  // AI Connect is found by its container name (Docker's DNS), not by mcp.my.ava.do
+  assert.equal(config.mcpUpstream, "http://DAppNodePackage-mcp.avado.dnp.dappnode.eth:8000");
 });
 
 test("auth key settings: optional, a typo never stops the app, the default network and DNS are AVADO's", () => {
@@ -124,7 +134,7 @@ test("a rejected auth key leaves a plain message and the browser login still wor
   });
   await assert.rejects(ts.loginWithKey("tskey-auth-kAbC123CNTRL-secret0123", "settings"));
   const s = await ts.status(true);
-  assert.match(s.notice ?? "", /settings.*not accepted.*not valid/);
+  assert.match(s.notice ?? "", /entered when installing was not accepted.*not valid/);
   assert.equal((s.notice ?? "").includes("secret0123"), false);
   assert.deepEqual(readdirSync(config.stateDir).filter((f) => f.startsWith(".authkey")), []);
 });
@@ -171,13 +181,51 @@ test("status: a second AVADO serving the same network, exit node, login expiry, 
   assert.equal((await fake({ status: { BackendState: "NeedsMachineAuth" }, serve: {} }).ts.status(true)).state, "needs-approval");
 });
 
-test("switching the exit node keeps the AVADO network offered, and the other way round", async () => {
-  const a = fake({ status: RUNNING, serve: {}, prefs: { AdvertiseRoutes: ["172.33.0.0/16"] } });
-  await a.ts.setExitNode(true);
-  assert.ok(a.calls.some((c) => c.join(" ") === "set --advertise-routes=172.33.0.0/16 --advertise-exit-node=true"));
-  const b = fake({ status: RUNNING, serve: {}, prefs: { AdvertiseRoutes: ["172.33.0.0/16", "0.0.0.0/0", "::/0"] } });
-  await b.ts.setRoute(false);
-  assert.ok(b.calls.some((c) => c.join(" ") === "set --advertise-routes= --advertise-exit-node=true"));
+test("status: the DNS step is done when the box's DNS is a nameserver (Override on, or only for my.ava.do)", async () => {
+  assert.equal(dnsSetting({ DNS: { Resolvers: [{ Addr: "172.33.1.2" }] } }, "172.33.1.2"), "global");
+  assert.equal(dnsSetting({ DNS: { Resolvers: [{ Addr: "1.1.1.1" }], Routes: { "my.ava.do": [{ Addr: "172.33.1.2" }] } } }, "172.33.1.2"), "split");
+  assert.equal(dnsSetting({ DNS: { FallbackResolvers: [{ Addr: "172.33.1.2:53" }] } }, "172.33.1.2"), "not-override");
+  assert.equal(dnsSetting({ DNS: null }, "172.33.1.2"), "none");
+  assert.equal(dnsSetting({}, "172.33.1.2"), "none");
+
+  const netmap = { DNS: { Resolvers: [{ Addr: "172.33.1.2" }] } };
+  const peers = { ...RUNNING, Peer: { a: { HostName: "phone", Online: true }, b: { HostName: "laptop", Online: false } } };
+  const ts = new Tailscale(config, silentLogger, {
+    exec: async (args) => ({ stdout: JSON.stringify(args[0] === "status" ? peers : args[0] === "debug" && args[1] === "netmap" ? netmap : {}), stderr: "" }),
+    spawnUp: () => ({ kill() {} }),
+  });
+  const st = await ts.status(true);
+  assert.equal(st.dns, "global");
+  assert.equal(st.peersOnline, 1);
+  // a netmap that cannot be read: unknown, not "not done"
+  const broken = new Tailscale(config, silentLogger, {
+    exec: async (args) => {
+      if (args[0] === "debug" && args[1] === "netmap") throw new Error("no");
+      return { stdout: JSON.stringify(args[0] === "status" ? RUNNING : {}), stderr: "" };
+    },
+    spawnUp: () => ({ kill() {} }),
+  });
+  assert.equal((await broken.status(true)).dns, null);
+});
+
+test("while containerboot starts tailscaled the page says starting, and after 2 minutes without an answer that it is not running", async () => {
+  let now = 1_800_000_000_000;
+  const ts = new Tailscale(
+    config,
+    silentLogger,
+    {
+      exec: async () => {
+        throw new Error("failed to connect to local tailscaled");
+      },
+      spawnUp: () => ({ kill() {} }),
+    },
+    () => now,
+  );
+  assert.equal((await ts.status(true)).state, "starting");
+  now += 119_000;
+  assert.equal((await ts.status(true)).state, "starting");
+  now += 2_000;
+  assert.equal((await ts.status(true)).state, "error");
 });
 
 test("Serve and Funnel only ever point at the local AI Connect relay on port 443", () => {
@@ -212,10 +260,11 @@ test("status before login shows the login link; other apps never get it", async 
 
 test("login starts `tailscale up` in the background (it returns only once logged in)", async () => {
   const { ts, spawned } = fake({ status: { BackendState: "NeedsLogin" }, serve: {} });
-  await ts.login(true);
+  await ts.login();
   assert.equal(spawned.length, 1);
   assert.equal(spawned[0]![0], "up");
   assert.ok(spawned[0]!.includes("--advertise-routes=172.33.0.0/16"));
+  assert.ok(spawned[0]!.includes("--advertise-exit-node"));
   assert.equal((await ts.status(true)).state, "logging-in");
 });
 
@@ -257,29 +306,70 @@ test("switching AI Connect sharing off when nothing is shared is fine; an own lo
   assert.match((await own.status(true)).notice ?? "", /mcp\.my\.ava\.do:8000\/mcp/);
 });
 
-test("the relay passes only the MCP paths on to AI Connect", async () => {
-  assert.ok(isMcpPath("/mcp"));
-  assert.ok(isMcpPath("/k/avado_abcDEF-123_x/mcp"));
-  for (const p of ["/", "/api/state", "/api/tokens", "/index.html", "/k/x/mcp/../../api/state", "/mcpx", "/admin"]) assert.equal(isMcpPath(p), false, p);
+async function listen(handler: http.RequestListener): Promise<number> {
+  const server = http.createServer(handler);
+  servers.push(server);
+  await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+  return (server.address() as AddressInfo).port;
+}
 
+/** A stand-in for AI Connect's agent port (or for another app that took over its address). */
+async function fakeUpstream(identity: unknown) {
   const seen: string[] = [];
-  const upstream = http.createServer((req, res) => {
+  const port = await listen((req, res) => {
     seen.push(`${req.method} ${req.url} ${req.headers.authorization ?? ""}`);
+    if (req.url === "/identity") {
+      res.writeHead(identity === null ? 404 : 200, { "Content-Type": "application/json" });
+      res.end(typeof identity === "string" ? identity : JSON.stringify(identity));
+      return;
+    }
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end('{"ok":true}');
   });
-  servers.push(upstream);
-  await new Promise<void>((r) => upstream.listen(0, "127.0.0.1", r));
-  const relay = http.createServer(createRelay(`http://127.0.0.1:${(upstream.address() as AddressInfo).port}`, silentLogger));
-  servers.push(relay);
-  await new Promise<void>((r) => relay.listen(0, "127.0.0.1", r));
-  const base = `http://127.0.0.1:${(relay.address() as AddressInfo).port}`;
+  return { port, seen };
+}
+
+test("the relay passes only the MCP paths on to AI Connect, after AI Connect said who it is", async () => {
+  assert.ok(isMcpPath("/mcp"));
+  assert.ok(isMcpPath("/k/avado_abcDEF-123_x/mcp"));
+  for (const p of ["/", "/api/state", "/api/tokens", "/index.html", "/k/x/mcp/../../api/state", "/mcpx", "/admin", "/identity"]) assert.equal(isMcpPath(p), false, p);
+
+  const up = await fakeUpstream({ name: "mcp.avado.dnp.dappnode.eth", version: "0.1.0" });
+  const names: string[] = [];
+  const relayPort = await listen(
+    createRelay(`http://DAppNodePackage-mcp.avado.dnp.dappnode.eth:${up.port}`, silentLogger, {
+      lookup: async (n) => (names.push(n), "127.0.0.1"),
+    }),
+  );
+  const base = `http://127.0.0.1:${relayPort}`;
 
   const ok = await fetch(`${base}/mcp`, { method: "POST", headers: { Authorization: "Bearer avado_x" }, body: "{}" });
   assert.equal(ok.status, 200);
   assert.equal((await fetch(`${base}/api/state`)).status, 404);
   assert.equal((await fetch(`${base}/`)).status, 404);
-  assert.deepEqual(seen, ["POST /mcp Bearer avado_x"]);
+  // the identity question carries no key; only then the request (with the key) goes through
+  assert.deepEqual(up.seen, ["GET /identity ", "POST /mcp Bearer avado_x"]);
+  assert.deepEqual(names, ["dappnodepackage-mcp.avado.dnp.dappnode.eth"]); // DNS names do not care about case
+});
+
+test("the relay never sends an assistant's key to another app at AI Connect's old address", async () => {
+  for (const identity of [{ name: "skaz-starknet-test" }, null, "<html>not json</html>", { version: "0.1.0" }]) {
+    const other = await fakeUpstream(identity);
+    const relayPort = await listen(createRelay(`http://127.0.0.1:${other.port}`, silentLogger));
+    const r = await fetch(`http://127.0.0.1:${relayPort}/mcp`, { method: "POST", headers: { Authorization: "Bearer avado_secret" }, body: "{}" });
+    assert.equal(r.status, 502, JSON.stringify(identity));
+    assert.match(((await r.json()) as { error: { message: string } }).error.message, /AI Connect is not installed/);
+    assert.deepEqual(other.seen, ["GET /identity "], JSON.stringify(identity));
+  }
+  // AI Connect removed: its container name does not resolve any more
+  const relayPort = await listen(
+    createRelay("http://DAppNodePackage-mcp.avado.dnp.dappnode.eth:8000", silentLogger, {
+      lookup: async () => Promise.reject(Object.assign(new Error("getaddrinfo ENOTFOUND"), { code: "ENOTFOUND" })),
+    }),
+  );
+  const r = await fetch(`http://127.0.0.1:${relayPort}/k/avado_secret/mcp`, { method: "POST", body: "{}" });
+  assert.equal(r.status, 502);
+  assert.match(((await r.json()) as { error: { message: string } }).error.message, /AI Connect is not installed/);
 });
 
 test("the page API: Funnel cannot be switched on without the confirmation, and needs the page's header", async () => {

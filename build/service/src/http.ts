@@ -153,11 +153,9 @@ export function createApp(config: Config, logger: Logger, ts: Tailscale): Reques
             const key = body.authKey.trim();
             if (!isAuthKey(key)) return sendError(res, 400, "This does not look like a Tailscale auth key. It starts with tskey-auth-.");
             await ts.loginWithKey(key, "page");
-          } else await ts.login(body.offerRoute !== false);
+          } else await ts.login();
         }
         else if (pathname === "/api/logout") await ts.logout();
-        else if (pathname === "/api/route") await ts.setRoute(on);
-        else if (pathname === "/api/exit-node") await ts.setExitNode(on);
         else if (pathname === "/api/share-mcp") await ts.shareMcp(on);
         else if (pathname === "/api/funnel") {
           // the page asks the owner to confirm with the exact words; a stray request cannot switch it on

@@ -2,20 +2,28 @@
   "name": "tailscale.avado.dnp.dappnode.eth",
   "version": "0.1.0",
   "title": "Tailscale",
-  "description": "Reach your whole AVADO from your phone or laptop wherever you are, with your own free Tailscale account: the AVADO Admin at my.ava.do and every app open just like at home. Log in with the link on the app's page (or with an auth key), then follow the short steps there. Your AI assistant can also reach AVADO AI Connect through Tailscale. AVADO Remote Access keeps working as before. Optional and off by default: share AI Connect on the internet for ChatGPT, and use your home internet when you are away (exit node).",
+  "description": "Reach your whole AVADO from your phone or laptop wherever you are, with your own free Tailscale account: the AVADO Admin at my.ava.do and every app open just like at home. Paste a reusable Tailscale auth key when you install, then follow the short checklist on the app's page. AVADO Remote Access keeps working as before. Your AI assistant can also reach AVADO AI Connect through Tailscale.",
   "shortDescription": "Free private access to your whole AVADO with your own Tailscale account",
   "type": "service",
   "avadocategory": "thelab",
   "autoupdate": true,
   "image": {
     "volumes": [
-      "tailscale:/data"
+      "tailscale:/data",
+      "/dev/net/tun:/dev/net/tun"
     ],
     "environment": [
-      "TS_AUTHKEY="
+      "TS_AUTHKEY=",
+      "TS_ROUTES=172.33.0.0/16",
+      "TS_EXTRA_ARGS=--advertise-exit-node",
+      "TS_DEBUG_FIREWALL_MODE=auto"
     ],
     "ports": [],
-    "restart": "always"
+    "restart": "always",
+    "cap_add": [
+      "NET_ADMIN",
+      "SYS_MODULE"
+    ]
   },
   "author": "AVADO",
   "license": "GPL-3.0",
@@ -23,5 +31,15 @@
   "links": {
     "OnboardingWizard": "http://tailscale.my.ava.do",
     "HomePage": "https://tailscale.com"
-  }
+  },
+  "setupFields": [
+    {
+      "env": "TS_AUTHKEY",
+      "title": "Tailscale auth key",
+      "description": "Create a reusable key at Tailscale → Settings → Keys and paste it here.",
+      "link": "https://login.tailscale.com/admin/settings/keys",
+      "secret": true,
+      "required": false
+    }
+  ]
 }

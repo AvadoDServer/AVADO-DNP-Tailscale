@@ -9,9 +9,10 @@ const config = loadConfig();
 const logger = createLogger();
 process.on("unhandledRejection", (reason) => logger.error(`unhandled rejection: ${errorMessage(reason)}`));
 
+// tailscaled is run by containerboot next to this app (build/start.sh); this app only talks to it.
 const ts = new Tailscale(config, logger);
-ts.startDaemon();
-// An auth key in the app's settings logs the box in by itself, once (the identity is then kept)
+ts.removeLeftoverKeys();
+// The auth key from the installer logs the box in by itself, once (the identity is then kept)
 void ts.autoLogin();
 
 const page = http.createServer(createApp(config, logger, ts));
@@ -35,14 +36,14 @@ for (const [server, port, host, what] of [
 }
 
 logger.info(
-  `AVADO Tailscale ${config.version} started (userspace networking, offers ${config.avadoSubnet}; ZeroTier and the box's DNS are not touched)` +
-    (config.authKey ? "; an auth key is set in the settings" : ""),
+  `AVADO Tailscale page ${config.version} started (offers ${config.routes.join(",") || "no routes"}${config.extraArgs.length ? `, ${config.extraArgs.filter((a) => !a.startsWith("--login-server")).join(" ")}` : ""})` +
+    (config.authKey ? "; an auth key was entered at install" : ""),
 );
 
 function shutdown(signal: string) {
   logger.info(`${signal} received, shutting down`);
-  void ts.stopDaemon().finally(() => process.exit(0));
-  setTimeout(() => process.exit(0), 5000).unref();
+  ts.stop();
+  process.exit(0);
 }
 process.on("SIGTERM", () => shutdown("SIGTERM"));
 process.on("SIGINT", () => shutdown("SIGINT"));
