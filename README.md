@@ -81,6 +81,13 @@ own devices can also reach AI Connect directly at `http://mcp.my.ava.do:8000/mcp
   routes. ZeroTier Remote Access (`remoteconnect`), bind and the box's routing are not touched
   (checked on the test box: host routes, rules and iptables unchanged by the package).
 - State in the `tailscale` volume (`/data/tailscale`). No host ports.
+- What the owner's Tailscale devices can reach (box test with Headscale): with the route approved,
+  everything on `172.33.0.0/16`, including the box itself at `172.33.0.1` (its SSH port answers,
+  as it does on the home network and over ZeroTier). Even with the route switched off, userspace
+  mode hands connections to the box's own Tailscale address (`100.x.y.z`) to this container's
+  local ports: the Tailscale page (port 80) and the AI Connect relay (port 8100, `/mcp` only, an AI
+  Connect key is still needed). The box's LAN and other ports of the box are not reachable that
+  way. All of this is limited to the owner's Tailscale devices.
 
 ## What comes from DAppNode
 
