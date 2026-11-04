@@ -1,0 +1,81 @@
+/* AVADO Tailscale page, on top of base.css. Colours come from theme.css (the Admin's tokens). */
+[hidden] {
+  display: none !important;
+}
+.steps {
+  margin: var(--space-md) 0;
+  padding-left: 1.3rem;
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.check {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+  margin: var(--space-sm) 0;
+  font-weight: 600;
+}
+
+.check input {
+  margin-top: 0.35rem;
+}
+
+.small {
+  font-size: 0.88rem;
+}
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9em;
+  overflow-wrap: anywhere;
+}
+
+.tag {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.05rem 0.5rem;
+  border-radius: var(--radius-full);
+  background: rgb(var(--bg-inset));
+  color: rgb(var(--fg-muted));
+}
+
+.tag.ok {
+  background: rgb(var(--verdict-ok));
+  color: rgb(var(--fg));
+}
+
+.login-link {
+  margin-top: var(--space-lg);
+  display: grid;
+  gap: var(--space-sm);
+  justify-items: start;
+}
+
+.login-link img {
+  background: #fff;
+  border-radius: var(--radius-control);
+  padding: 8px;
+}
+
+.login-link a {
+  font-weight: 700;
+  color: rgb(var(--accent));
+}
+
+.danger-zone {
+  margin-top: var(--space-lg);
+  border-top: 1px solid rgb(var(--border));
+  padding-top: var(--space-md);
+}
+
+.button.ghost {
+  background: transparent;
+  color: rgb(var(--fg));
+  border: 1px solid rgb(var(--border));
+}
+
+.facts dd {
+  overflow-wrap: anywhere;
+}

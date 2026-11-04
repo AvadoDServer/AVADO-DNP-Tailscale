@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AVADO Tailscale</title>
+    <link rel="icon" href="/favicon.png" />
+    <link rel="stylesheet" href="/theme.css" />
+    <link rel="stylesheet" href="/base.css" />
+    <link rel="stylesheet" href="/style.css" />
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <main class="shell">
+      <header class="top">
+        <span class="brand">AVADO <strong>Tailscale</strong></span>
+        <span class="version" id="version"></span>
+      </header>
+
+      <section class="card verdict" id="verdict" data-level="checking" aria-live="polite">
+        <span class="dot" aria-hidden="true"></span>
+        <div>
+          <h1 id="headline">Checking Tailscale…</h1>
+          <p id="subline">One moment.</p>
+        </div>
+      </section>
+
+      <p class="notice" id="notice" hidden></p>
+
+      <!-- Not logged in -->
+      <section class="card" id="login-card" hidden>
+        <h2>Reach your AVADO from anywhere, for free</h2>
+        <p>
+          Tailscale is a free service that links your own devices (phone, laptop, AVADO) into a private network, wherever they are. AVADO
+          Remote Access keeps working as before; this is an extra way in.
+        </p>
+        <ol class="steps">
+          <li>Make a free account at <strong>tailscale.com</strong> (you can sign in with Google, Microsoft, Apple or GitHub).</li>
+          <li>Install the Tailscale app on your phone or laptop and log in with the same account.</li>
+          <li>Press the button below and log in once more to add your AVADO.</li>
+        </ol>
+        <label class="check"><input type="checkbox" id="offer-route" checked /> Also let me open the AVADO Admin and my apps through Tailscale</label>
+        <div class="actions">
+          <button type="button" class="button" id="login">Add my AVADO to Tailscale</button>
+          <span class="muted" id="login-msg" role="status"></span>
+        </div>
+        <div class="login-link" id="login-link" hidden>
+          <p>Open this link and log in with your Tailscale account. On a phone, scan the code.</p>
+          <p><a id="auth-url" href="#" target="_blank" rel="noopener noreferrer">Open the Tailscale login page</a></p>
+          <img id="qr" alt="QR code of the Tailscale login link" width="200" height="200" />
+          <p class="muted small">Only you should open this link: whoever logs in with it adds this AVADO to their Tailscale.</p>
+        </div>
+      </section>
+
+      <!-- Logged in -->
+      <section class="card" id="connected-card" hidden>
+        <h2>Your AVADO in Tailscale</h2>
+        <dl class="facts">
+          <div>
+            <dt>Name</dt>
+            <dd id="dns-name"></dd>
+          </div>
+          <div>
+            <dt>Tailscale address</dt>
+            <dd id="ips"></dd>
+          </div>
+          <div>
+            <dt>Account</dt>
+            <dd id="tailnet"></dd>
+          </div>
+        </dl>
+      </section>
+
+      <section class="card" id="admin-card" hidden>
+        <h2>Open the AVADO Admin from anywhere</h2>
+        <label class="check"><input type="checkbox" id="route-toggle" /> Offer the AVADO Admin and apps to my Tailscale devices</label>
+        <div id="route-steps">
+          <p class="muted">Two one-time settings in your Tailscale account (login.tailscale.com/admin):</p>
+          <ol class="steps">
+            <li id="step-approve">
+              <strong>Machines</strong>: open <span class="mono" id="machine-name">avado</span>, choose <strong>Edit route settings</strong> and tick
+              <span class="mono" id="subnet">172.33.0.0/16</span>. <span class="tag" id="route-state"></span>
+            </li>
+            <li>
+              <strong>DNS</strong>: under Nameservers choose <strong>Add nameserver → Custom</strong>, enter
+              <span class="mono">172.33.1.2</span>, switch on <strong>Restrict to domain</strong> and enter <span class="mono">my.ava.do</span>.
+            </li>
+          </ol>
+          <p class="muted">Then, with Tailscale on, <span class="mono">http://my.ava.do</span> opens your Admin on your phone or laptop.</p>
+        </div>
+      </section>
+
+      <section class="card" id="mcp-card" hidden>
+        <h2>AI Connect through Tailscale</h2>
+        <p class="muted">
+          If you use AVADO AI Connect, your AI assistant can reach it through Tailscale with a secure address. Your assistant still needs one of
+          your AI Connect keys.
+        </p>
+        <label class="check"><input type="checkbox" id="share-toggle" /> Make AI Connect reachable in my tailnet</label>
+        <p class="mono small" id="mcp-url" hidden></p>
+        <p class="muted small" id="https-hint">
+          The first time, Tailscale may ask you to allow “HTTPS certificates” in your account; this page shows the link when it does.
+        </p>
+
+        <div class="danger-zone">
+          <label class="check"><input type="checkbox" id="funnel-toggle" /> Share AI Connect on the internet (for ChatGPT and Claude on the web)</label>
+          <p class="muted small">
+            ChatGPT and Claude on the web run on the internet and cannot see your home network. This switch gives AI Connect a public
+            address. What it shares: <strong>only</strong> the door your assistant knocks on, and only someone with one of your AI Connect keys
+            can get in. Your Admin, your apps, the AI Connect key page and the rest of your AVADO are not shared. Anyone on the internet can see
+            that the address exists. Switch it off when you do not need it. Off by default.
+          </p>
+        </div>
+      </section>
+
+      <section class="card" id="logout-card" hidden>
+        <h2>Disconnect</h2>
+        <p class="muted">Removes this AVADO from your Tailscale. You can add it again at any time.</p>
+        <div class="actions"><button type="button" class="button ghost" id="logout">Log out of Tailscale</button></div>
+      </section>
+
+      <p class="privacy">
+        Tailscale connects your devices directly and encrypts the traffic between them. Tailscale's servers see your devices' names and
+        addresses so they can introduce them to each other; your traffic does not pass through AVADO.
+      </p>
+    </main>
+  </body>
+</html>
