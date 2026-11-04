@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdirSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { after, test } from "node:test";
@@ -317,4 +317,14 @@ test("the page API: an auth key must look like one; the page gets the DNS addres
   assert.equal(full.dnsServer, "172.33.1.2");
   assert.equal(full.subnet, "172.33.0.0/16");
   assert.equal(full.authKeyInSettings, false);
+});
+
+test("an auth key file left by an interrupted login is removed at start", () => {
+  mkdirSync(config.stateDir, { recursive: true });
+  writeFileSync(`${config.stateDir}/.authkey-deadbeef0001`, "tskey-auth-kLEFTOVER-0123456789abcdef", { mode: 0o600 });
+  writeFileSync(`${config.stateDir}/keep-me`, "x");
+  const { ts } = fake({ status: RUNNING, serve: {} });
+  ts.removeLeftoverKeys();
+  assert.deepEqual(readdirSync(config.stateDir).filter((f) => f.startsWith(".authkey")), []);
+  assert.ok(readdirSync(config.stateDir).includes("keep-me"));
 });

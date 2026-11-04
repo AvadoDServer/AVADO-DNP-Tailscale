@@ -11,7 +11,7 @@
  */
 import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readdirSync, rmSync } from "node:fs";
 import { rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { Config } from "./config.js";
@@ -195,10 +195,33 @@ export class Tailscale {
     }
   }
 
+  /**
+   * Removes auth key files a previous run left behind (the app was stopped while a key login was
+   * still running): a key must never stay in the volume.
+   */
+  removeLeftoverKeys(): void {
+    let names: string[] = [];
+    try {
+      names = readdirSync(this.config.stateDir);
+    } catch {
+      return;
+    }
+    for (const name of names) {
+      if (!name.startsWith(".authkey-")) continue;
+      try {
+        rmSync(path.join(this.config.stateDir, name), { force: true });
+        this.logger.info("removed an auth key file left from an interrupted login");
+      } catch (e) {
+        this.logger.warn(`cannot remove a leftover auth key file: ${errorMessage(e)}`);
+      }
+    }
+  }
+
   /** Starts tailscaled and keeps it running. */
   startDaemon(): void {
     const dir = path.join(this.config.stateDir, "tailscale");
     mkdirSync(dir, { recursive: true });
+    this.removeLeftoverKeys();
     const child = spawn(this.config.tailscaledBin, ["--tun=userspace-networking", `--statedir=${dir}`, `--socket=${this.config.socket}`, "--port=41641"], {
       stdio: ["ignore", "pipe", "pipe"],
     });
