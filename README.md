@@ -1,113 +1,149 @@
 # AVADO Tailscale
 
-`tailscale.avado.dnp.dappnode.eth`: free private remote access to the **whole AVADO** with the owner's
-own Tailscale account (no AVADO servers, no running cost). Once set up, `http://my.ava.do` and every
-app (`http://<app>.my.ava.do`) open on the owner's phone or laptop wherever they are, just like at
-home. A plain-language page at http://tailscale.my.ava.do logs the box in and walks the owner through
-the few one-time steps in the Tailscale admin console.
+`tailscale.avado.dnp.dappnode.eth`: open your whole AVADO from your phone or laptop wherever you
+are, with your own free Tailscale account. The AVADO Admin at `http://my.ava.do` and every app open
+just like at home. AVADO Remote Access keeps working as before. No AVADO servers, no running cost.
 
-It works like DAppNode's Tailscale package (see "What comes from DAppNode" below), adapted to AVADO:
-the AVADO network `172.33.0.0/16` is offered as a subnet route by default, and the owner adds the box's
-DNS `172.33.1.2` for `my.ava.do` in Tailscale.
+The setup is the same as DAppNode's Tailscale package
+([their guide](https://docs.dappnode.io/docs/user/access-your-dappnode/vpn/tailscale/)). The app's
+page at `http://tailscale.my.ava.do` shows the steps as a checklist and ticks each one off by itself.
 
-## Signing in
+## Set it up in 5 steps
 
-Two ways, both on the page:
+Before you start: make a free account at [tailscale.com](https://tailscale.com).
 
-1. **Login link** (default): press *Add my AVADO to Tailscale*, open the link (or scan the QR code) and
-   log in. Only a real `https://login.tailscale.com/a/...` link is ever shown (or, with an own login
-   server, a link on that server); other apps reading `/api/status` get a short form without it, and
-   it is hidden in the logs.
-2. **Auth key**: paste a key from Tailscale → Settings → Keys on the page (the simple way: the key is
-   used once and not kept), *or* put it in the app's settings in the Admin (`TS_AUTHKEY`; Advanced
-   mode → the app → Settings → Environment variables → *Update environment variables*, which
-   restarts the app; the current Admin installer does not show environment values). A key in the
-   settings stays readable for anyone with Admin access, like every app setting. A key from the settings is used only while
-   the box is not logged in yet (like DAppNode's `TS_AUTH_ONCE=true`); after that the identity is kept
-   in the `tailscale` volume and restarts or updates never use the key again. The key goes to
-   `tailscale up` in a private file that is deleted right after (never on a command line) and is
-   hidden in this app's logs. A rejected or mistyped key never stops the app: the page says so in
-   plain words and the login link still works (DAppNode needs the key cleared and a restart for that).
+### 1. Connect this AVADO
 
-Advanced, not shown in the Admin: `TS_LOGIN_SERVER` (an own control server such as Headscale) and
-`TS_HOSTNAME` (default `avado`).
+In Tailscale, open [Settings → Keys](https://login.tailscale.com/admin/settings/keys) and press
+**Generate auth key**. Switch on **Reusable** and copy the key. Paste it in the **Tailscale auth key**
+field when you install the app. Forgot it? Paste it on the app's page in step 1 instead.
 
-## What the page offers once logged in
+<img src="docs/guide/step-1-connect.png" alt="Step 1 on the app's page: paste the key and press Connect" width="300">
 
-| Switch | Default | Command | Effect |
-|---|---|---|---|
-| Admin and apps | **on** | `tailscale up --advertise-routes=172.33.0.0/16` at login, `tailscale set --advertise-routes=... --advertise-exit-node=...` | offers the AVADO network; the page shows the steps and whether the route is approved |
-| AI Connect for my Tailscale devices | off | `tailscale serve --bg --yes --https=443 http://127.0.0.1:8100` | `https://avado.<name>.ts.net/mcp`, real certificate |
-| AI Connect on the internet | off | `tailscale funnel --bg --yes --https=443 http://127.0.0.1:8100` | same address, public; plain warning and a confirmation |
-| Exit node | off | `tailscale set --advertise-exit-node=true` (keeps the route) | the owner's devices may send their internet traffic through the home connection; plain warning |
+### 2. Approve its routes
 
-The step-by-step guide on the page (plain words, links straight to the right console pages):
+Open [Machines](https://login.tailscale.com/admin/machines). At **avado**, choose **Edit route
+settings**. Tick `172.33.0.0/16` and **Use as exit node**, then save.
 
-1. **Machines** → the AVADO → ⋯ → *Edit route settings* → tick `172.33.0.0/16` (status shown: done / not yet).
-2. **DNS** → *Add nameserver* → *Custom* → `172.33.1.2`, *Restrict to domain* `my.ava.do` (split DNS).
-3. **Machines** → the AVADO → ⋯ → *Disable key expiry* (otherwise Tailscale logs the box out after
-   a few months; the page shows the date).
-4. Install Tailscale on the phone or laptop, same account, switch it on (Linux: `tailscale set --accept-routes`).
-5. Open `http://my.ava.do`.
+Your Tailscale devices can then also reach the AVADO's login (SSH). If its password is still
+`avado`, change it (see "Who can reach this AVADO" below).
 
-**Who can reach the box:** every device in the owner's Tailscale account (Tailscale's default
-access rule lets all of them reach approved routes), the same as a device on the home network; the
-page says so and asks the owner to add only their own devices and not share the AVADO in Tailscale.
+<img src="docs/guide/step-2-routes.png" alt="Step 1 done, step 2 to do" width="300">
 
-**Two AVADOs in one account** offer the same network and only one can be used at a time (DAppNode
-documents the same). The page warns when another device already serves `172.33.0.0/16` and names it.
-The box itself never takes routes from others (`--accept-routes=false`), so a second AVADO can never
-pull its own network away.
+### 3. Add the AVADO as DNS
 
-`127.0.0.1:8100` is a relay in this package that passes only `/mcp` and `/k/<key>/mcp` to AI
-Connect's agent-only port (`http://mcp.my.ava.do:8000`). Everything else answers 404, so Funnel never
-exposes the Admin, other apps or AI Connect's key page. With the AVADO network approved, the owner's
-own devices can also reach AI Connect directly at `http://mcp.my.ava.do:8000/mcp`.
+Open [DNS](https://login.tailscale.com/admin/dns). Choose **Add nameserver → Custom**, enter
+`172.33.1.2` and save. Turn on **Override DNS servers**.
 
-## How it runs (userspace subnet router, no privileges)
+<img src="docs/guide/step-3-dns.png" alt="Steps 1 and 2 done, step 3 to do" width="300">
 
-- Official `tailscale` / `tailscaled` binaries (v1.104.4), copied from `tailscale/tailscale` pinned by
-  digest, on the same `node:22.23.2-bookworm-slim` base as AVADO Care and AI Connect.
-- `tailscaled --tun=userspace-networking`: **no** privileged mode, no `/dev/net/tun`, no `NET_ADMIN`,
-  no routes, no iptables on the box, runs as the `node` user. Subnet routing and the exit node still
-  work: tailscaled's own network stack answers traffic for `172.33.0.0/16` and opens ordinary
-  connections from this container (apps see the Tailscale container as the sender).
-- Why not kernel mode like DAppNode (`/dev/net/tun` + `NET_ADMIN`)? The AVADO DAPPMANAGER's compose
-  generator has no `devices`, so kernel mode would need `privileged: true` (like `remoteconnect`).
-  The userspace router reached the Admin, WAMP (WebSocket), apps, the IPFS gateway and DNS (UDP) in
-  the box test, so there is no reason to give the package more rights. Userspace mode is slower than
-  kernel mode for bulk traffic, which does not matter for the Admin and app pages.
-- `--accept-dns=false --accept-routes=false`: the container keeps the box's DNS (bind) and takes no
-  routes. ZeroTier Remote Access (`remoteconnect`), bind and the box's routing are not touched
-  (checked on the test box: host routes, rules and iptables unchanged by the package).
-- State in the `tailscale` volume (`/data/tailscale`). No host ports.
-- What the owner's Tailscale devices can reach (box test with Headscale): with the route approved,
-  everything on `172.33.0.0/16`, including the box itself at `172.33.0.1` (its SSH port answers,
-  as it does on the home network and over ZeroTier). Even with the route switched off, userspace
-  mode hands connections to the box's own Tailscale address (`100.x.y.z`) to this container's
-  local ports: the Tailscale page (port 80) and the AI Connect relay (port 8100, `/mcp` only, an AI
-  Connect key is still needed). The box's LAN and other ports of the box are not reachable that
-  way. All of this is limited to the owner's Tailscale devices.
+### 4. Connect your phone or laptop
 
-## What comes from DAppNode
+Install [Tailscale](https://tailscale.com/download), log in with the same account and press
+**Connect**. On a Linux computer: `sudo tailscale up --accept-routes`.
 
-Studied, not copied: `dappnode/DAppNodePackage-tailscale` has **no licence file**, so it is used as a
-reference only and nothing was taken over verbatim. Ideas adapted, in our own code:
+<img src="docs/guide/step-4-device.png" alt="Steps 1 to 3 done, step 4 to do" width="300">
 
-- advertise the node's internal network by default (`TS_ROUTES=172.33.0.0/16,...` there; AVADO has
-  no `10.20.0.0/24` VPN network, so only `172.33.0.0/16` here);
-- optional auth key or browser login; key used only while logged out (`TS_AUTH_ONCE=true`), identity
-  in a state volume;
-- show only a genuine `https://login.tailscale.com/a/...` login link (their status reporter's rule);
-- the user guide from docs.dappnode.io (Access your Dappnode → VPN → Tailscale): approve the subnet
-  route in Machines, add the node's DNS as nameserver restricted to its domain (their "Advanced DNS
-  configuration", the default here), install the app on the devices, and the "two Dappnodes"
-  caveat. AVADO has no setup wizard, so the auth key is an environment value plus a field on the
-  page, and the guide lives on the page.
+### 5. Open my.ava.do
 
-Not taken over: kernel mode (see above), the exit node on by default (DAppNode passes
-`--advertise-exit-node`; here it is an opt-in switch), and the reporter container (the page reads
-tailscaled directly).
+With Tailscale on, open `http://my.ava.do` on your phone or laptop.
+
+<img src="docs/guide/step-5-done.png" alt="All steps done: open http://my.ava.do on your phone with Tailscale on" width="300">
+
+Tip: in Machines, choose **Disable key expiry** for the AVADO. Otherwise Tailscale logs it out after
+a few months. The page reminds you of the date.
+
+## More options (on the page, folded away)
+
+- **Log in with a link instead of a key**: the page shows Tailscale's login link and a QR code.
+- **DNS only for my.ava.do**: instead of Override DNS servers, switch on **Restrict to domain** and
+  enter `my.ava.do`. Your devices then keep their own DNS for everything else.
+- **Two AVADOs in one Tailscale account**: both offer the same addresses, so only one works at a
+  time. Untick the routes of the one you do not need from afar. The page warns when it sees this.
+- **AI Connect through Tailscale**: make AVADO AI Connect reachable from your Tailscale devices at
+  `https://avado.<your-name>.ts.net/mcp`, or on the internet for ChatGPT and Claude on the web
+  (off by default, asks for confirmation). Only AI Connect's MCP door is shared, and only with one
+  of your AI Connect keys.
+- **Log out of Tailscale**.
+
+## Who can reach this AVADO
+
+Every device in your Tailscale account, the same as a device at home: the Admin, the apps and the
+AVADO's login (SSH at `172.33.0.1`, user `avado`). Add only your own devices and do not share the
+AVADO with other people in Tailscale.
+
+The AVADO's password starts as `avado`. To change it: on a computer with Tailscale on, open a
+terminal and type `ssh avado@172.33.0.1`, log in with the current password, type `passwd` and
+choose a new one.
+Keep it safe: AVADO support asks for it when they help you. (Neither the Admin nor docs.ava.do has a
+page for this yet.)
+
+## How it works
+
+Like DAppNode's package, the app runs Tailscale's own container start program (`containerboot`) in
+**kernel mode**:
+
+| Setting | Value | Where |
+|---|---|---|
+| `TS_AUTHKEY` | the reusable key from the installer | manifest (shown in the Admin) |
+| `TS_ROUTES` | `172.33.0.0/16` (the AVADO network: Admin, apps, DNS at `172.33.1.2`) | manifest |
+| `TS_EXTRA_ARGS` | `--advertise-exit-node` | manifest |
+| `TS_DEBUG_FIREWALL_MODE` | `auto` (tailscaled chose nftables on the test box) | manifest |
+| `TS_AUTH_ONCE` | `true`: the key is used only while the box is not logged in | image |
+| `TS_STATE_DIR` | `/data/tailscale` in the `tailscale` volume | image |
+| `TS_USERSPACE` | `false` (kernel mode) | image |
+| `TS_BOOT_TIMEOUT` | `1h` | image |
+| `TS_HOSTNAME` | `avado` | image |
+
+- Rights: `cap_add: NET_ADMIN, SYS_MODULE` and `/dev/net/tun` as a volume
+  (`/dev/net/tun:/dev/net/tun`), because the AVADO DAPPMANAGER's compose generator supports
+  `cap_add` and volumes but not `devices`. Docker's default device rules allow the tun device, so
+  the app is **not** privileged. IP forwarding is already on inside AVADO containers
+  (`net.ipv4.ip_forward=1`), which containerboot needs for the route. tailscaled's firewall rules
+  and the `tailscale0` interface live in the container's own network; the box's routes,
+  iptables/nftables and ZeroTier Remote Access are not touched (checked on the test box).
+- IPv6: AVADO containers have IPv6 off, so Tailscale's health check says "IPv6 forwarding is
+  disabled" (DAppNode's package shows the same). IPv4, the route and the exit node work.
+- The auth key differs from DAppNode in one way: containerboot does not get it. The page logs in
+  with `TS_AUTHKEY` once, while the box is not logged in yet (`TS_AUTH_ONCE`), and hands the key to
+  `tailscale up` in a private file that is deleted right after (never on a command line, hidden in
+  the app's logs). A rejected key shows a plain message on the page and the login link keeps
+  working; DAppNode's package needs the key cleared and a restart for that.
+- Two processes (`build/start.sh`): containerboot (root, with the rights above), and the page
+  (`node`, as root but with no Linux capability except binding port 80, and `no_new_privs`).
+  containerboot stops when a login fails or nobody logs in within `TS_BOOT_TIMEOUT`; start.sh
+  starts it again, so the page stays. If the page stops, the app restarts.
+- The page reads `tailscale status`, `debug prefs` and `debug netmap` (for the DNS tick) and runs
+  only fixed commands: `up` with the same settings as containerboot (key login, login link),
+  `logout`, `serve` and `funnel`. The login link shown is only ever a real
+  `https://login.tailscale.com/a/...` link (or one on an own login server); other apps reading
+  `/api/status` get a short form without it.
+- `--accept-dns=false --accept-routes=false` on the box: the container keeps the box's DNS (bind)
+  and never takes routes from another AVADO.
+- The AI Connect relay (`127.0.0.1:8100`, Serve/Funnel point at it) passes only `/mcp` and
+  `/k/<key>/mcp`. It finds AI Connect by its container name `DAppNodePackage-mcp.avado.dnp.dappnode.eth`
+  (Docker's own DNS answers that only while the container exists; `mcp.my.ava.do` can keep an old
+  address after a removal) and first asks that address for `/identity` without the key. Only when
+  the answer is AI Connect does it forward the request, to the same address. Otherwise the
+  assistant gets "AI Connect is not installed or not running on this AVADO."
+- An own control server (Headscale) for tests: `TS_EXTRA_ARGS=--advertise-exit-node --login-server=http://...`.
+
+### Installer field
+
+The manifest has `"setupFields"` for `TS_AUTHKEY` (title "Tailscale auth key", one line, link to the
+keys page). The current Admin installer (10.0.68) shows no environment fields at all; the install
+call already sends `userSetEnvs`. Until the Admin shows the field, the key goes on the app's page
+(step 1), or in the Admin under the app → Settings → Environment variables (Advanced mode).
+
+### What comes from DAppNode
+
+`dappnode/DAppNodePackage-tailscale` has no licence file, so it is a reference only and nothing was
+copied. Taken over as ideas: containerboot in kernel mode with `TS_ROUTES`, `TS_EXTRA_ARGS=--advertise-exit-node`,
+`TS_AUTH_ONCE`, `TS_BOOT_TIMEOUT=1h`, `TS_DEBUG_FIREWALL_MODE=auto`, `NET_ADMIN` + `SYS_MODULE`,
+`/dev/net/tun`, the reusable auth key at install, the user guide (approve the route and exit node,
+nameserver with Override DNS servers, Linux `--accept-routes`, two-devices caveat), and the
+reporter's "only a genuine login link" rule. Not taken: the reporter container (the page reads
+tailscaled directly) and their second route `10.20.0.0/24` (AVADO has no such network).
 
 ## Build and test
 
@@ -116,9 +152,10 @@ cd build/service && yarn install --frozen-lockfile && yarn lint && yarn test   #
 docker buildx build --platform linux/amd64 --load -f build/Dockerfile -t tailscale.avado.dnp.dappnode.eth:0.1.0 .
 ```
 
-End to end without a Tailscale account: run Headscale (an open-source Tailscale control server) next
-to the box, install the package with `TS_LOGIN_SERVER=http://<headscale>` and a Headscale pre-auth key
-as `TS_AUTHKEY`, run a second tailscaled as the "phone" in another Docker network with
-`--accept-routes --accept-dns`, approve the route with `headscale nodes approve-routes`, and set split
-DNS `my.ava.do → 172.33.1.2` in Headscale's config. Serve/Funnel (AI Connect over HTTPS) need real
-Tailscale: Headscale has no HTTPS certificates.
+End to end without a Tailscale account (as on the test box): run Headscale next to the box with a
+global nameserver `172.33.1.2` and `override_local_dns: true`, install the app through the
+DAPPMANAGER with `TS_AUTHKEY` (a reusable Headscale key) and
+`TS_EXTRA_ARGS=--advertise-exit-node --login-server=http://<headscale>`, approve
+`172.33.0.0/16,0.0.0.0/0,::/0` with `headscale nodes approve-routes`, and run a second tailscaled as
+the "phone" in its own Docker network with `--accept-routes --accept-dns`. Serve/Funnel need real
+Tailscale (Headscale has no HTTPS certificates).
