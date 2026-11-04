@@ -19,6 +19,10 @@ const PATTERNS: Array<[RegExp, string | ((...m: string[]) => string)]> = [
   [/(authorization["']?\s*[:=]\s*["']?)(?!Bearer\b)[^\s"',;]+/gi, `$1${HIDDEN}`],
   // a pending Tailscale login link: whoever opens it first adds the box to their tailnet
   [/https:\/\/login\.tailscale\.com\/a\/[A-Za-z0-9]+/g, HIDDEN],
+  // ... and the same on an own login server (Headscale: /register/<key>)
+  [/(https?:\/\/[^\s/]+\/register\/)[A-Za-z0-9_-]+/g, `$1${HIDDEN}`],
+  // Tailscale and Headscale auth keys (TS_AUTHKEY): whoever has one can add devices to the account
+  [/\b(?:tskey|hskey)-[A-Za-z0-9_-]{6,}/g, HIDDEN],
   // JWTs (the beacon/engine API secret is used to sign these)
   [/\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/g, HIDDEN],
   // extended private keys
@@ -27,7 +31,7 @@ const PATTERNS: Array<[RegExp, string | ((...m: string[]) => string)]> = [
   [/(\b[a-z][a-z0-9+.-]*:\/\/[^\s:/@]+:)[^\s@/]+@/gi, `$1${HIDDEN}@`],
   // key = value pairs whose key names a secret
   [
-    /((?:password|passwd|passphrase|pwd|mnemonic|seed[_ -]?phrase|seed|private[_ -]?key|privkey|secret|api[_-]?key|access[_-]?key|token|jwt|keystore[_-]?password)["']?\s*[:=]\s*)("(?:[^"\\]|\\.)*"|'[^']*'|[^\s,&}]+)/gi,
+    /((?:password|passwd|passphrase|pwd|mnemonic|seed[_ -]?phrase|seed|private[_ -]?key|privkey|secret|api[_-]?key|access[_-]?key|auth[_-]?key|token|jwt|keystore[_-]?password)["']?\s*[:=]\s*)("(?:[^"\\]|\\.)*"|'[^']*'|[^\s,&}]+)/gi,
     `$1${HIDDEN}`,
   ],
   // long hex: private keys (64), signatures (130, 192) and the like. 40 (addresses) and 96 (BLS

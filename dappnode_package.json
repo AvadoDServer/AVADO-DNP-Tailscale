@@ -2,14 +2,17 @@
   "name": "tailscale.avado.dnp.dappnode.eth",
   "version": "0.1.0",
   "title": "Tailscale",
-  "description": "Reach your AVADO from your phone or laptop wherever you are, with your own free Tailscale account. Open the AVADO Admin and your apps from anywhere, and let your AI assistant reach AVADO AI Connect. AVADO Remote Access keeps working as before. Optional and off by default: share AI Connect on the internet for ChatGPT.",
-  "shortDescription": "Free private remote access with your own Tailscale account",
+  "description": "Reach your whole AVADO from your phone or laptop wherever you are, with your own free Tailscale account: the AVADO Admin at my.ava.do and every app open just like at home. Log in with the link on the app's page (or with an auth key), then follow the short steps there. Your AI assistant can also reach AVADO AI Connect through Tailscale. AVADO Remote Access keeps working as before. Optional and off by default: share AI Connect on the internet for ChatGPT, and use your home internet when you are away (exit node).",
+  "shortDescription": "Free private access to your whole AVADO with your own Tailscale account",
   "type": "service",
   "avadocategory": "thelab",
   "autoupdate": true,
   "image": {
     "volumes": [
       "tailscale:/data"
+    ],
+    "environment": [
+      "TS_AUTHKEY="
     ],
     "ports": [],
     "restart": "always"

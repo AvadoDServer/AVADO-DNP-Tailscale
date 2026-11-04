@@ -79,3 +79,29 @@
 .facts dd {
   overflow-wrap: anywhere;
 }
+
+.more {
+  margin-top: var(--space-lg);
+  border-top: 1px solid rgb(var(--border));
+  padding-top: var(--space-md);
+}
+
+.more summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.input {
+  font: inherit;
+  flex: 1 1 16rem;
+  min-width: 0;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-control);
+  border: 1px solid rgb(var(--border));
+  background: rgb(var(--bg-inset));
+  color: rgb(var(--fg));
+}
+
+.card a {
+  color: rgb(var(--accent));
+}

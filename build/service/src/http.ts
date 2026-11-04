@@ -2,7 +2,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import type { IncomingMessage, RequestListener, ServerResponse } from "node:http";
 import path from "node:path";
 import QRCode from "qrcode";
-import type { Config } from "./config.js";
+import { isAuthKey, type Config } from "./config.js";
 import { checkCsrf, isSafeMethod } from "./csrf.js";
 import { isAllowedHost } from "./host.js";
 import { errorMessage, type Logger } from "./log.js";
@@ -132,16 +132,32 @@ export function createApp(config: Config, logger: Logger, ts: Tailscale): Reques
         const s = await ts.status();
         // The full status (with the login link) only for the page; other apps get the short form.
         if (!fromPage(req)) return sendJson(res, 200, publicStatus(s));
-        return sendJson(res, 200, { ...s, qr: await qr(s.authUrl), hostname: config.hostname, subnet: config.avadoSubnet, packageVersion: config.version });
+        return sendJson(res, 200, {
+          ...s,
+          qr: await qr(s.authUrl),
+          hostname: config.hostname,
+          subnet: config.avadoSubnet,
+          dnsServer: config.dnsServer,
+          ownLoginServer: config.loginServer !== null,
+          authKeyInSettings: config.authKey !== null,
+          packageVersion: config.version,
+        });
       }
 
       if (req.method !== "POST") return sendError(res, 405, "Use POST");
       const body = await readJson(req).catch(() => ({}) as Record<string, unknown>);
       const on = body.on === true;
       try {
-        if (pathname === "/api/login") await ts.login(body.offerRoute !== false);
+        if (pathname === "/api/login") {
+          if (typeof body.authKey === "string" && body.authKey.trim() !== "") {
+            const key = body.authKey.trim();
+            if (!isAuthKey(key)) return sendError(res, 400, "This does not look like a Tailscale auth key. It starts with tskey-auth-.");
+            await ts.loginWithKey(key, "page");
+          } else await ts.login(body.offerRoute !== false);
+        }
         else if (pathname === "/api/logout") await ts.logout();
         else if (pathname === "/api/route") await ts.setRoute(on);
+        else if (pathname === "/api/exit-node") await ts.setExitNode(on);
         else if (pathname === "/api/share-mcp") await ts.shareMcp(on);
         else if (pathname === "/api/funnel") {
           // the page asks the owner to confirm with the exact words; a stray request cannot switch it on

@@ -11,6 +11,8 @@ process.on("unhandledRejection", (reason) => logger.error(`unhandled rejection: 
 
 const ts = new Tailscale(config, logger);
 ts.startDaemon();
+// An auth key in the app's settings logs the box in by itself, once (the identity is then kept)
+void ts.autoLogin();
 
 const page = http.createServer(createApp(config, logger, ts));
 page.requestTimeout = 120_000;
@@ -32,7 +34,10 @@ for (const [server, port, host, what] of [
   server.listen(port, host, () => logger.info(`${what} listening on ${host}:${port}`));
 }
 
-logger.info(`AVADO Tailscale ${config.version} started (userspace networking; ZeroTier and the box's DNS are not touched)`);
+logger.info(
+  `AVADO Tailscale ${config.version} started (userspace networking, offers ${config.avadoSubnet}; ZeroTier and the box's DNS are not touched)` +
+    (config.authKey ? "; an auth key is set in the settings" : ""),
+);
 
 function shutdown(signal: string) {
   logger.info(`${signal} received, shutting down`);

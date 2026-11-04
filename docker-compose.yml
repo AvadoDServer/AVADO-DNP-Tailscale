@@ -7,6 +7,8 @@ services:
       dockerfile: build/Dockerfile
     volumes:
       - 'tailscale:/data'
+    environment:
+      - TS_AUTHKEY=
     restart: always
 volumes:
   tailscale: {}

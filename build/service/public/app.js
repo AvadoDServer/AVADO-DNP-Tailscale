@@ -33,27 +33,46 @@
     $(id).hidden = !on;
   }
 
+  function tag(id, done, doneText, todoText) {
+    var t = $(id);
+    t.textContent = done ? doneText : todoText;
+    t.className = done ? "tag ok" : "tag";
+  }
+
+  function day(iso) {
+    var d = new Date(iso);
+    return isNaN(d.getTime()) ? "" : d.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
+  }
+
   function render() {
     if (!s) return;
     $("version").textContent = s.packageVersion ? "Version " + s.packageVersion : "";
     var v = $("verdict");
     var running = s.state === "running";
+    var approval = s.state === "needs-approval";
     var needs = s.state === "needs-login" || s.state === "logging-in" || s.state === "stopped";
-    v.setAttribute("data-level", running ? "ok" : s.state === "error" ? "critical" : "warning");
+    var routeTodo = running && s.routeOffered && !s.routeApproved;
+    v.setAttribute("data-level", running && !routeTodo ? "ok" : s.state === "error" ? "critical" : "warning");
     $("headline").textContent = running
       ? "Your AVADO is in your Tailscale"
-      : needs
-        ? "Not connected to Tailscale yet"
-        : s.state === "error"
-          ? "Tailscale is not running"
-          : "Tailscale is starting…";
+      : approval
+        ? "Waiting for your approval in Tailscale"
+        : needs
+          ? "Not connected to Tailscale yet"
+          : s.state === "error"
+            ? "Tailscale is not running"
+            : "Tailscale is starting…";
     $("subline").textContent = running
-      ? "You can reach it from your own devices wherever you are, with Tailscale on."
-      : needs
-        ? "Follow the three steps below. It takes a few minutes."
-        : s.state === "error"
-          ? "It should start again by itself. If this stays, restart the Tailscale app in the Admin."
-          : "One moment.";
+      ? routeTodo
+        ? "One more step: allow the AVADO network in your Tailscale account (step 1 below)."
+        : "You can reach it from your own devices wherever you are, with Tailscale on."
+      : approval
+        ? "Your Tailscale account asks you to approve new devices. Open Machines in your Tailscale account and approve this AVADO."
+        : needs
+          ? "Follow the three steps below. It takes a few minutes."
+          : s.state === "error"
+            ? "It should start again by itself. If this stays, restart the Tailscale app in the Admin."
+            : "One moment.";
 
     $("notice").textContent = s.notice || "";
     show("notice", !!s.notice);
@@ -61,6 +80,8 @@
     show("login-card", needs);
     var link = s.authUrl;
     show("login-link", !!link);
+    show("key-in-settings", !!s.authKeyInSettings);
+    show("logout-key-note", !!s.authKeyInSettings);
     if (link) {
       $("auth-url").href = link;
       if (s.qr) $("qr").src = s.qr;
@@ -72,20 +93,35 @@
     show("connected-card", running);
     show("admin-card", running);
     show("mcp-card", running);
+    show("exit-card", running);
     show("logout-card", running);
     if (running) {
       $("dns-name").textContent = s.dnsName || "—";
-      $("ips").textContent = (s.ips || []).filter(function (ip) {
-        return ip.indexOf(":") < 0;
-      })[0] || "—";
+      $("ips").textContent =
+        (s.ips || []).filter(function (ip) {
+          return ip.indexOf(":") < 0;
+        })[0] || "—";
       $("tailnet").textContent = s.tailnet || "—";
       $("route-toggle").checked = !!s.routeOffered;
       show("route-steps", !!s.routeOffered);
-      $("machine-name").textContent = (s.dnsName || s.hostname || "avado").split(".")[0];
+      var machine = (s.dnsName || s.hostname || "avado").split(".")[0];
+      var names = document.querySelectorAll(".machine-name");
+      for (var i = 0; i < names.length; i++) names[i].textContent = machine;
       $("subnet").textContent = s.subnet;
-      var rs = $("route-state");
-      rs.textContent = s.routeApproved ? "Done" : "Not yet done";
-      rs.className = s.routeApproved ? "tag ok" : "tag";
+      $("dns-server").textContent = s.dnsServer || "172.33.1.2";
+      tag("route-state", s.routeApproved, "Done", "Not done yet");
+      tag("expiry-state", !s.keyExpiry, "Done", s.keyExpiry ? "Not done yet: logs out on " + day(s.keyExpiry) : "Not done yet");
+      $("clash").textContent = s.routeClash
+        ? "Another device in your Tailscale (" +
+          s.routeClash +
+          ") already offers the same AVADO network, probably a second AVADO. Only one can be opened through Tailscale at a time: switch this off on the one you do not need from afar."
+        : "";
+      show("clash", !!s.routeClash);
+
+      $("exit-toggle").checked = !!s.exitNodeOffered;
+      show("exit-state", !!s.exitNodeOffered);
+      tag("exit-state", s.exitNodeApproved, "Allowed", "Not allowed yet");
+
       $("share-toggle").checked = !!s.mcpShared;
       $("funnel-toggle").checked = !!s.funnel;
       $("funnel-toggle").disabled = !s.mcpShared;
@@ -124,7 +160,20 @@
 
   $("login").addEventListener("click", function () {
     $("login-msg").textContent = "Asking Tailscale for a login link (this can take half a minute)…";
-    act("/api/login", { offerRoute: $("offer-route").checked }, $("login"));
+    act("/api/login", {}, $("login"));
+  });
+
+  $("login-key").addEventListener("click", function () {
+    var key = $("auth-key").value.trim();
+    if (!key) {
+      $("auth-key").focus();
+      return;
+    }
+    $("login-msg").textContent = "Logging in with the key (this can take half a minute)…";
+    act("/api/login", { authKey: key }, $("login-key")).then(function () {
+      $("auth-key").value = "";
+      $("login-msg").textContent = "";
+    });
   });
 
   $("logout").addEventListener("click", function () {
@@ -133,7 +182,21 @@
   });
 
   $("route-toggle").addEventListener("change", function (e) {
-    act("/api/route", { on: e.target.checked }, e.target);
+    var on = e.target.checked;
+    if (!on && !confirm("Stop offering the AVADO Admin and apps to your Tailscale devices? You will not be able to open them through Tailscale until you switch this on again.")) {
+      e.target.checked = true;
+      return;
+    }
+    act("/api/route", { on: on }, e.target);
+  });
+
+  $("exit-toggle").addEventListener("change", function (e) {
+    var on = e.target.checked;
+    if (on && !confirm("Let your devices send their internet traffic through your AVADO's home connection when you choose it as exit node? Websites will see your home address.")) {
+      e.target.checked = false;
+      return;
+    }
+    act("/api/exit-node", { on: on }, e.target);
   });
 
   $("share-toggle").addEventListener("change", function (e) {

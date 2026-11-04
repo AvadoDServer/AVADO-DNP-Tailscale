@@ -31,15 +31,15 @@
       <section class="card" id="login-card" hidden>
         <h2>Reach your AVADO from anywhere, for free</h2>
         <p>
-          Tailscale is a free service that links your own devices (phone, laptop, AVADO) into a private network, wherever they are. AVADO
-          Remote Access keeps working as before; this is an extra way in.
+          Tailscale is a free service that links your own devices (phone, laptop, AVADO) into a private network, wherever they are. Once it is set
+          up, the AVADO Admin and all your apps open on your phone or laptop just like at home. AVADO Remote Access keeps working as before; this is
+          an extra way in.
         </p>
         <ol class="steps">
           <li>Make a free account at <strong>tailscale.com</strong> (you can sign in with Google, Microsoft, Apple or GitHub).</li>
           <li>Install the Tailscale app on your phone or laptop and log in with the same account.</li>
           <li>Press the button below and log in once more to add your AVADO.</li>
         </ol>
-        <label class="check"><input type="checkbox" id="offer-route" checked /> Also let me open the AVADO Admin and my apps through Tailscale</label>
         <div class="actions">
           <button type="button" class="button" id="login">Add my AVADO to Tailscale</button>
           <span class="muted" id="login-msg" role="status"></span>
@@ -50,6 +50,23 @@
           <img id="qr" alt="QR code of the Tailscale login link" width="200" height="200" />
           <p class="muted small">Only you should open this link: whoever logs in with it adds this AVADO to their Tailscale.</p>
         </div>
+
+        <details class="more" id="key-box">
+          <summary>Or log in with an auth key</summary>
+          <p class="muted small">
+            In your Tailscale account open
+            <a href="https://login.tailscale.com/admin/settings/keys" target="_blank" rel="noopener noreferrer">Settings → Keys</a>, press
+            <strong>Generate auth key</strong>, copy the key and paste it here. The key is used once to add this AVADO and is not kept.
+          </p>
+          <div class="actions">
+            <input type="password" id="auth-key" class="input" autocomplete="off" spellcheck="false" placeholder="tskey-auth-…" aria-label="Tailscale auth key" />
+            <button type="button" class="button ghost" id="login-key">Log in with this key</button>
+          </div>
+          <p class="muted small" id="key-in-settings" hidden>
+            An auth key is saved in this app's settings in the Admin (Advanced mode: this app → Settings → Environment variables → TS_AUTHKEY).
+            The AVADO uses it by itself whenever it is not logged in yet.
+          </p>
+        </details>
       </section>
 
       <!-- Logged in -->
@@ -72,21 +89,44 @@
       </section>
 
       <section class="card" id="admin-card" hidden>
-        <h2>Open the AVADO Admin from anywhere</h2>
+        <h2>Open the AVADO Admin and your apps from anywhere</h2>
         <label class="check"><input type="checkbox" id="route-toggle" /> Offer the AVADO Admin and apps to my Tailscale devices</label>
+        <p class="notice" id="clash" hidden></p>
         <div id="route-steps">
-          <p class="muted">Two one-time settings in your Tailscale account (login.tailscale.com/admin):</p>
+          <p class="muted">Three one-time steps in your Tailscale account, then two on your phone or laptop:</p>
           <ol class="steps">
-            <li id="step-approve">
-              <strong>Machines</strong>: open <span class="mono" id="machine-name">avado</span>, choose <strong>Edit route settings</strong> and tick
-              <span class="mono" id="subnet">172.33.0.0/16</span>. <span class="tag" id="route-state"></span>
+            <li>
+              <strong>Allow the AVADO network.</strong> Open
+              <a href="https://login.tailscale.com/admin/machines" target="_blank" rel="noopener noreferrer">Machines</a>, find
+              <span class="mono machine-name">avado</span>, open its <strong>⋯</strong> menu, choose <strong>Edit route settings</strong>, tick
+              <span class="mono" id="subnet">172.33.0.0/16</span> and save. <span class="tag" id="route-state"></span>
             </li>
             <li>
-              <strong>DNS</strong>: under Nameservers choose <strong>Add nameserver → Custom</strong>, enter
-              <span class="mono">172.33.1.2</span>, switch on <strong>Restrict to domain</strong> and enter <span class="mono">my.ava.do</span>.
+              <strong>Let your devices find <span class="mono">my.ava.do</span>.</strong> Open
+              <a href="https://login.tailscale.com/admin/dns" target="_blank" rel="noopener noreferrer">DNS</a>. Under <strong>Nameservers</strong>
+              choose <strong>Add nameserver → Custom</strong>, enter <span class="mono" id="dns-server">172.33.1.2</span>, switch on
+              <strong>Restrict to domain</strong> (Split DNS), enter <span class="mono">my.ava.do</span> and save.
+            </li>
+            <li>
+              <strong>Keep your AVADO logged in.</strong> In
+              <a href="https://login.tailscale.com/admin/machines" target="_blank" rel="noopener noreferrer">Machines</a>, open the
+              <strong>⋯</strong> menu of <span class="mono machine-name">avado</span> and choose <strong>Disable key expiry</strong>. Otherwise
+              Tailscale logs the AVADO out after a few months. <span class="tag" id="expiry-state"></span>
+            </li>
+            <li>
+              <strong>On your phone or laptop:</strong> install the Tailscale app from
+              <a href="https://tailscale.com/download" target="_blank" rel="noopener noreferrer">tailscale.com/download</a>, log in with the same
+              account and switch it on. (On a Linux computer, also allow subnet routes: <span class="mono">tailscale up --accept-routes</span>.)
+            </li>
+            <li>
+              <strong>Open <span class="mono">http://my.ava.do</span></strong> in the browser. Your apps open the same way as at home, for example
+              <span class="mono">http://tailscale.my.ava.do</span>.
             </li>
           </ol>
-          <p class="muted">Then, with Tailscale on, <span class="mono">http://my.ava.do</span> opens your Admin on your phone or laptop.</p>
+          <p class="muted small">
+            <strong>Two AVADOs in one Tailscale account?</strong> Both offer the same network, so only one of them can be opened through Tailscale at a
+            time. Switch this off on the AVADO you do not need from afar (or untick its route in Edit route settings).
+          </p>
         </div>
       </section>
 
@@ -113,9 +153,24 @@
         </div>
       </section>
 
+      <section class="card" id="exit-card" hidden>
+        <h2>Use your home internet when you are away (optional)</h2>
+        <label class="check"><input type="checkbox" id="exit-toggle" /> Let my devices use this AVADO as an exit node</label>
+        <p class="muted small">
+          When you choose your AVADO as <strong>exit node</strong> in the Tailscale app on your phone or laptop, all its internet traffic goes through
+          your home connection, for example on a public Wi-Fi. Websites then see your home address, and it can be slower. Off by default. After
+          switching it on, allow it once: <strong>Machines</strong> → <span class="mono machine-name">avado</span> → <strong>Edit route settings</strong>
+          → <strong>Use as exit node</strong>. <span class="tag" id="exit-state" hidden></span>
+        </p>
+      </section>
+
       <section class="card" id="logout-card" hidden>
         <h2>Disconnect</h2>
         <p class="muted">Removes this AVADO from your Tailscale. You can add it again at any time.</p>
+        <p class="muted small" id="logout-key-note" hidden>
+          An auth key is saved in this app's settings, so the AVADO logs in again by itself when it restarts. To stop that, first empty
+          TS_AUTHKEY in the Admin (Advanced mode: this app → Settings → Environment variables).
+        </p>
         <div class="actions"><button type="button" class="button ghost" id="logout">Log out of Tailscale</button></div>
       </section>
 
