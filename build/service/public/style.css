@@ -105,3 +105,109 @@
 .card a {
   color: rgb(var(--accent));
 }
+
+/* The five steps: one short sentence and one button each, a live tick when done. */
+.checklist {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+  display: grid;
+  gap: var(--space-lg);
+}
+
+.checklist > li {
+  counter-increment: step;
+  position: relative;
+  padding-left: 2.6rem;
+}
+
+.checklist > li::before {
+  content: counter(step);
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1.9rem;
+  height: 1.9rem;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  background: rgb(var(--bg-inset));
+  color: rgb(var(--fg));
+}
+
+.checklist > li.done::before {
+  content: "✓";
+  background: rgb(var(--verdict-ok));
+}
+
+.checklist p {
+  margin: var(--space-xs) 0 var(--space-sm);
+}
+
+.step-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-sm);
+  min-height: 1.9rem;
+}
+
+.step-title {
+  font-weight: 700;
+  font-size: 1.05rem;
+}
+
+.tick {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: rgb(var(--fg-muted));
+}
+
+.tick.ok {
+  color: rgb(var(--fg));
+}
+
+/* Large tap targets on a phone */
+.checklist .button,
+.more .button,
+.input {
+  min-height: 44px;
+}
+
+.checklist a.button {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+
+.copy {
+  font: inherit;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.95em;
+  min-height: 36px;
+  padding: 0.15rem 0.6rem;
+  border-radius: var(--radius-control);
+  border: 1px dashed rgb(var(--border));
+  background: rgb(var(--bg-inset));
+  color: rgb(var(--fg));
+  cursor: pointer;
+}
+
+.more summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+}
+
+.more-item {
+  border-top: 1px solid rgb(var(--border));
+  padding-top: var(--space-md);
+  margin-top: var(--space-md);
+}
+
+.more-item h3 {
+  margin: 0 0 var(--space-xs);
+  font-size: 1rem;
+}
