@@ -1,8 +1,15 @@
 /**
  * Tailscale Serve and Funnel only forward to this machine, so they point at this relay on
  * 127.0.0.1, which passes MCP requests on to AI Connect's agent-only port. Only the MCP paths go
- * through: /mcp and /k/<key>/mcp. Everything else (the AI Connect page, its key management, any
- * other app or the Admin) answers 404 here, so a public Funnel address exposes nothing else.
+ * through: /mcp and /k/<key>/mcp, and (AI Connect 0.2.0) the sign-in of its Connect button:
+ * the OAuth documents under /.well-known/ and /oauth/* (registration, the authorize redirect, the
+ * token endpoint and the "Approve on your AVADO" waiting page). Everything else (the AI Connect
+ * page, its key management, any other app or the Admin) answers 404 here, so a public Funnel
+ * address exposes nothing else. The approval itself only ever happens on the AI Connect page,
+ * which is not reachable here.
+ *
+ * The box's Tailscale name (the Host Tailscale Serve was asked for) is passed on as
+ * X-Forwarded-Host, so AI Connect can name its sign-in address (the OAuth issuer) correctly.
  *
  * Before anything is passed on, the relay makes sure it talks to AI Connect: an MCP request
  * carries the assistant's AI Connect key, and an old address could belong to another app by now.
@@ -26,6 +33,41 @@ const NOT_THERE = "AI Connect is not installed or not running on this AVADO.";
 
 export function isMcpPath(pathname: string): boolean {
   return pathname === "/mcp" || pathname === "/mcp/" || /^\/k\/[A-Za-z0-9_-]{1,200}\/mcp\/?$/.test(pathname);
+}
+
+/** AI Connect's sign-in (OAuth) paths; the query string is kept only for these. */
+export const SIGN_IN_PATHS = new Set([
+  "/.well-known/oauth-protected-resource",
+  "/.well-known/oauth-protected-resource/mcp",
+  "/.well-known/oauth-authorization-server",
+  "/oauth/register",
+  "/oauth/authorize",
+  "/oauth/token",
+  "/oauth/wait",
+  "/oauth/wait/status",
+  "/oauth/connect.js",
+  "/oauth/theme.css",
+  "/oauth/base.css",
+  "/oauth/style.css",
+  "/oauth/favicon.png",
+]);
+
+export function isSignInPath(pathname: string): boolean {
+  return SIGN_IN_PATHS.has(pathname);
+}
+
+function plainName(raw: string | string[] | undefined): string | null {
+  const host = (Array.isArray(raw) ? raw[0] : raw)?.split(",")[0]?.trim().toLowerCase().replace(/:443$/, "");
+  if (!host || host.length > 253 || isIP(host)) return null;
+  return /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(host) ? host : null;
+}
+
+/**
+ * The name Tailscale Serve answered for (the box's Tailscale name): its Host header, which Serve
+ * keeps, or else the X-Forwarded-Host it adds. Null when neither is a plain host name.
+ */
+export function publicHost(req: http.IncomingMessage): string | null {
+  return plainName(req.headers.host) ?? plainName(req.headers["x-forwarded-host"]);
 }
 
 const HOP = new Set(["connection", "keep-alive", "proxy-connection", "transfer-encoding", "upgrade", "te", "trailer", "host"]);
@@ -82,14 +124,19 @@ export function createRelay(upstream: string, logger: Logger, opts: RelayOptions
 
   return (req, res) => {
     let pathname: string;
+    let search = "";
     try {
-      pathname = new URL(req.url ?? "/", "http://relay").pathname;
+      const u = new URL(req.url ?? "/", "http://relay");
+      pathname = u.pathname;
+      search = u.search;
     } catch {
       pathname = "";
     }
-    if (!isMcpPath(pathname) || !["POST", "GET", "DELETE"].includes(req.method ?? "")) {
+    const mcp = isMcpPath(pathname);
+    const signIn = !mcp && isSignInPath(pathname);
+    if ((!mcp && !signIn) || !(mcp ? ["POST", "GET", "DELETE"] : ["POST", "GET", "OPTIONS"]).includes(req.method ?? "")) {
       res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8", "X-Content-Type-Options": "nosniff" });
-      res.end("Only AVADO AI Connect's MCP endpoint (/mcp) is shared here.");
+      res.end("Only AVADO AI Connect's MCP endpoint (/mcp) and its sign-in are shared here.");
       return;
     }
     void (async (): Promise<void> => {
@@ -108,7 +155,11 @@ export function createRelay(upstream: string, logger: Logger, opts: RelayOptions
       const headers: http.OutgoingHttpHeaders = {};
       for (const [k, v] of Object.entries(req.headers)) if (!HOP.has(k.toLowerCase()) && v !== undefined) headers[k] = v;
       headers.host = target.host;
-      const up = http.request({ host: ip, port, method: req.method, path: pathname, headers, timeout: 300_000 }, (upRes) => {
+      // never a made-up X-Forwarded-Host from outside: only the Host Tailscale Serve answered for
+      delete headers["x-forwarded-host"];
+      const name = publicHost(req);
+      if (name) headers["x-forwarded-host"] = name;
+      const up = http.request({ host: ip, port, method: req.method, path: signIn ? pathname + search.slice(0, 4096) : pathname, headers, timeout: 300_000 }, (upRes) => {
         const out: http.OutgoingHttpHeaders = {};
         for (const [k, v] of Object.entries(upRes.headers)) if (!HOP.has(k.toLowerCase()) && v !== undefined) out[k] = v;
         res.writeHead(upRes.statusCode ?? 502, out);
