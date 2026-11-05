@@ -1,0 +1,21 @@
+{
+  "title": "Tailscale",
+  "components": [
+    {
+      "name": "Tailscale",
+      "github": "tailscale/tailscale",
+      "images": [
+        {
+          "var": "tailscale",
+          "ref": "tailscale/tailscale:v{version}"
+        }
+      ],
+      "pins": [
+        {
+          "file": "build/Dockerfile",
+          "text": "ARG TAILSCALE_IMAGE=tailscale/tailscale:v{version}@sha256:{tailscale}"
+        }
+      ]
+    }
+  ]
+}
