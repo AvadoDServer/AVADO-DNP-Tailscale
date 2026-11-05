@@ -62,8 +62,8 @@ a few months. The page reminds you of the date.
   time. Untick the routes of the one you do not need from afar. The page warns when it sees this.
 - **AI Connect through Tailscale**: make AVADO AI Connect reachable from your Tailscale devices at
   `https://avado.<your-name>.ts.net/mcp`, or on the internet for ChatGPT and Claude on the web
-  (off by default, asks for confirmation). Only AI Connect's MCP door is shared, and only with one
-  of your AI Connect keys.
+  (off by default, asks for confirmation). Only AI Connect's MCP door and its sign-in are shared,
+  and only apps you allowed on the AI Connect page (or with one of your AI Connect keys) get in.
 - **Log out of Tailscale**.
 
 ## Who can reach this AVADO
@@ -120,8 +120,13 @@ Like DAppNode's package, the app runs Tailscale's own container start program (`
   `/api/status` get a short form without it.
 - `--accept-dns=false --accept-routes=false` on the box: the container keeps the box's DNS (bind)
   and never takes routes from another AVADO.
-- The AI Connect relay (`127.0.0.1:8100`, Serve/Funnel point at it) passes only `/mcp` and
-  `/k/<key>/mcp`. It finds AI Connect by its container name `DAppNodePackage-mcp.avado.dnp.dappnode.eth`
+- The AI Connect relay (`127.0.0.1:8100`, Serve/Funnel point at it) passes only `/mcp`,
+  `/k/<key>/mcp` and the fixed list of AI Connect 0.2.0's sign-in paths (the OAuth documents under
+  `/.well-known/`, `/oauth/register`, `/oauth/authorize`, `/oauth/token` and the "Approve on your
+  AVADO" waiting page with its files). The query string is kept only for the sign-in paths. The box's
+  Tailscale name (the Host Serve answered for) goes along as `X-Forwarded-Host`, replacing any value
+  from outside, so AI Connect names its sign-in address correctly. The approval itself happens only on
+  the AI Connect page, which the relay never passes on. It finds AI Connect by its container name `DAppNodePackage-mcp.avado.dnp.dappnode.eth`
   (Docker's own DNS answers that only while the container exists; `mcp.my.ava.do` can keep an old
   address after a removal) and first asks that address for `/identity` without the key. Only when
   the answer is AI Connect does it forward the request, to the same address. Otherwise the
@@ -150,7 +155,7 @@ tailscaled directly) and their second route `10.20.0.0/24` (AVADO has no such ne
 
 ```
 cd build/service && yarn install --frozen-lockfile && yarn lint && yarn test   # Node 22
-docker buildx build --platform linux/amd64 --load -f build/Dockerfile -t tailscale.avado.dnp.dappnode.eth:0.1.0 .
+docker buildx build --platform linux/amd64 --load -f build/Dockerfile -t tailscale.avado.dnp.dappnode.eth:0.2.0 .
 ```
 
 End to end without a Tailscale account (as on the test box): run Headscale next to the box with a
