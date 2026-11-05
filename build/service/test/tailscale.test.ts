@@ -6,7 +6,7 @@ import { after, test } from "node:test";
 import { loadConfig } from "../src/config.js";
 import { createApp, publicStatus } from "../src/http.js";
 import { silentLogger } from "../src/log.js";
-import { createRelay, isMcpPath } from "../src/relay.js";
+import { createRelay, isMcpPath, isSignInPath } from "../src/relay.js";
 import { redact } from "../src/redact.js";
 import { Tailscale, commands, dnsSetting, isLoginLink, type TailscaleDeps } from "../src/tailscale.js";
 
@@ -350,6 +350,42 @@ test("the relay passes only the MCP paths on to AI Connect, after AI Connect sai
   // the identity question carries no key; only then the request (with the key) goes through
   assert.deepEqual(up.seen, ["GET /identity ", "POST /mcp Bearer avado_x"]);
   assert.deepEqual(names, ["dappnodepackage-mcp.avado.dnp.dappnode.eth"]); // DNS names do not care about case
+});
+
+test("the relay passes AI Connect's sign-in (Connect button) on, with its query and the box's Tailscale name", async () => {
+  for (const p of ["/.well-known/oauth-authorization-server", "/.well-known/oauth-protected-resource/mcp", "/oauth/authorize", "/oauth/token", "/oauth/register", "/oauth/wait", "/oauth/wait/status", "/oauth/connect.js"]) {
+    assert.ok(isSignInPath(p), p);
+  }
+  for (const p of ["/oauth", "/oauth/", "/oauth/../api/state", "/.well-known/", "/.well-known/security.txt", "/api/connect/x", "/oauth/x"]) assert.equal(isSignInPath(p), false, p);
+
+  const seen: Array<{ url: string; xfh: string | undefined; host: string | undefined }> = [];
+  const port = await listen((req, res) => {
+    if (req.url === "/identity") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ name: "mcp.avado.dnp.dappnode.eth", version: "0.2.0" }));
+      return;
+    }
+    seen.push({ url: req.url ?? "", xfh: req.headers["x-forwarded-host"] as string | undefined, host: req.headers.host });
+    res.writeHead(303, { Location: "/oauth/wait?r=abc" });
+    res.end();
+  });
+  const relayPort = await listen(createRelay(`http://127.0.0.1:${port}`, silentLogger));
+  const send = (path: string, headers: Record<string, string>) =>
+    new Promise<number>((resolve, reject) => {
+      http.get({ host: "127.0.0.1", port: relayPort, path, headers }, (res) => {
+        res.resume();
+        resolve(res.statusCode ?? 0);
+      }).on("error", reject);
+    });
+  // Serve keeps the Host it answered for; a made-up X-Forwarded-Host from outside is replaced
+  assert.equal(await send("/oauth/authorize?client_id=a&state=s", { Host: "avado.tail1234.ts.net", "X-Forwarded-Host": "evil.example" }), 303);
+  assert.deepEqual(seen[0], { url: "/oauth/authorize?client_id=a&state=s", xfh: "avado.tail1234.ts.net", host: `127.0.0.1:${port}` });
+  // MCP paths keep dropping the query
+  assert.equal(await send("/mcp?x=1", { Host: "avado.tail1234.ts.net" }), 303);
+  assert.equal(seen[1]!.url, "/mcp");
+  // the AI Connect page and its API stay out of reach
+  assert.equal(await send("/api/connect/00000000-0000-4000-8000-000000000000", { Host: "avado.tail1234.ts.net" }), 404);
+  assert.equal(seen.length, 2);
 });
 
 test("the relay never sends an assistant's key to another app at AI Connect's old address", async () => {

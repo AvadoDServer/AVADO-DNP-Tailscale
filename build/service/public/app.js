@@ -212,7 +212,7 @@
     var on = e.target.checked;
     if (on) {
       var ok = confirm(
-        "Share AI Connect on the internet?\n\nThis gives AI Connect a public address so ChatGPT or Claude on the web can reach it. Only someone with one of your AI Connect keys can use it; nothing else on your AVADO is shared. Switch it off when you do not need it.",
+        "Share AI Connect on the internet?\n\nThis gives AI Connect a public address so ChatGPT or Claude on the web can reach it. Only apps you allowed on the AI Connect page (or with one of your AI Connect keys) can use it; nothing else on your AVADO is shared. Switch it off when you do not need it.",
       );
       if (!ok) {
         e.target.checked = false;
