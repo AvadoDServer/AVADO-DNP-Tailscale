@@ -5,6 +5,10 @@ export interface Config {
   host: string;
   /** The Tailscale page (http://tailscale.my.ava.do). */
   port: number;
+  /** The same page on https (0: off), with the box's *.my.ava.do certificate (https.ts). */
+  httpsPort: number;
+  /** Where https listens; null: the container's AVADO network address. */
+  httpsHost: string | null;
   /** This app's own files (the volume). tailscaled keeps its state in TS_STATE_DIR (containerboot). */
   stateDir: string;
   socket: string;
@@ -98,6 +102,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   return {
     host: env.HOST || "0.0.0.0",
     port: num(env, "PORT", 80),
+    httpsPort: num(env, "HTTPS_PORT", 443),
+    httpsHost: env.HTTPS_HOST || null,
     stateDir: env.STATE_DIR || "/data",
     socket: env.TS_SOCKET || "/var/run/tailscale/tailscaled.sock",
     tailscaleBin: env.TAILSCALE_BIN || "tailscale",

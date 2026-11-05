@@ -1,7 +1,7 @@
 version: '3.4'
 services:
   tailscale.avado.dnp.dappnode.eth:
-    image: 'tailscale.avado.dnp.dappnode.eth:0.2.0'
+    image: 'tailscale.avado.dnp.dappnode.eth:0.2.1'
     build:
       context: .
       dockerfile: build/Dockerfile

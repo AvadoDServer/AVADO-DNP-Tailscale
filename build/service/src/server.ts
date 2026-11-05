@@ -2,6 +2,7 @@ import http from "node:http";
 import { loadConfig } from "./config.js";
 import { createApp } from "./http.js";
 import { createLogger, errorMessage } from "./log.js";
+import { avadoNetworkAddress, serveHttps } from "./https.js";
 import { createRelay } from "./relay.js";
 import { Tailscale } from "./tailscale.js";
 
@@ -15,7 +16,8 @@ ts.removeLeftoverKeys();
 // The auth key from the installer logs the box in by itself, once (the identity is then kept)
 void ts.autoLogin();
 
-const page = http.createServer(createApp(config, logger, ts));
+const app = createApp(config, logger, ts);
+const page = http.createServer(app);
 page.requestTimeout = 120_000;
 page.headersTimeout = 30_000;
 page.maxConnections = 64;
@@ -35,6 +37,12 @@ for (const [server, port, host, what] of [
   server.listen(port, host, () => logger.info(`${what} listening on ${host}:${port}`));
 }
 
+// The same page on https (port 443) once the box's *.my.ava.do certificate is there; on the AVADO
+// network address only (Tailscale Serve and Funnel use port 443 on the Tailscale address).
+const httpsHost = config.httpsPort ? (config.httpsHost ?? avadoNetworkAddress()) : null;
+if (config.httpsPort && !httpsHost) logger.warn("HTTPS: no AVADO network address found; the page works over http");
+const secure = httpsHost ? serveHttps(app, { port: config.httpsPort, host: httpsHost, logger }) : null;
+
 logger.info(
   `AVADO Tailscale page ${config.version} started (offers ${config.routes.join(",") || "no routes"}${config.extraArgs.length ? `, ${config.extraArgs.filter((a) => !a.startsWith("--login-server")).join(" ")}` : ""})` +
     (config.authKey ? "; an auth key was entered at install" : ""),
@@ -42,6 +50,7 @@ logger.info(
 
 function shutdown(signal: string) {
   logger.info(`${signal} received, shutting down`);
+  secure?.stop();
   ts.stop();
   process.exit(0);
 }

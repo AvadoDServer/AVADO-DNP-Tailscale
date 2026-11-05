@@ -133,6 +133,15 @@ Like DAppNode's package, the app runs Tailscale's own container start program (`
   assistant gets "AI Connect is not installed or not running on this AVADO."
 - An own control server (Headscale) for tests: `TS_EXTRA_ARGS=--advertise-exit-node --login-server=http://...`.
 
+**HTTPS.** The page also answers on https://tailscale.my.ava.do (port 443) with the box's
+`*.my.ava.do` certificate, the one the Admin and the other AVADO apps with https use (the
+box's DAPPMANAGER serves it at http://dappmanager.my.ava.do; iso.ava.do is the second source).
+Chrome tries https first ("Always use secure connections"), so without it Chrome showed "This
+site doesn't support a secure connection". The certificate is used only when it is for
+`*.my.ava.do`, valid for at least another hour and matches its key; until then the page stays
+http only and it is checked every 5 minutes, after that daily. http works as before, also in
+the Admin's Setup tab. `build/service/src/https.ts`. It listens only on the container's AVADO network address: tailscaled itself answers Tailscale Serve and Funnel on the Tailscale address, port 443.
+
 ### Installer field
 
 The manifest has a `"setupWizard"` field for `TS_AUTHKEY`, in the same format as DAppNode's
