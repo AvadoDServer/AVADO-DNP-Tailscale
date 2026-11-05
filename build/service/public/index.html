@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AVADO Tailscale</title>
+    <link rel="icon" href="/favicon.png" />
+    <link rel="stylesheet" href="/theme.css" />
+    <link rel="stylesheet" href="/base.css" />
+    <link rel="stylesheet" href="/style.css" />
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <main class="shell">
+      <header class="top">
+        <span class="brand">AVADO <strong>Tailscale</strong></span>
+        <span class="version" id="version"></span>
+      </header>
+
+      <section class="card verdict" id="verdict" data-level="checking" aria-live="polite">
+        <span class="dot" aria-hidden="true"></span>
+        <div>
+          <h1 id="headline">Checking Tailscale…</h1>
+          <p id="subline"></p>
+        </div>
+      </section>
+
+      <p class="notice" id="notice" hidden></p>
+      <p class="notice" id="clash" hidden></p>
+
+      <section class="card">
+        <ol class="checklist">
+          <li id="step-1">
+            <div class="step-head"><span class="step-title">Connect this AVADO</span><span class="tick" id="tick-1"></span></div>
+            <div id="key-form">
+              <p>Paste a reusable key from Tailscale → Settings → Keys.</p>
+              <div class="actions">
+                <a class="button ghost" href="https://login.tailscale.com/admin/settings/keys" target="_blank" rel="noopener noreferrer">Get a key</a>
+                <input type="password" id="auth-key" class="input" autocomplete="off" spellcheck="false" placeholder="tskey-auth-…" aria-label="Tailscale auth key" />
+                <button type="button" class="button" id="login-key">Connect</button>
+              </div>
+              <p class="muted small" id="login-msg" role="status"></p>
+            </div>
+          </li>
+          <li id="step-2">
+            <div class="step-head"><span class="step-title">Approve its routes</span><span class="tick" id="tick-2"></span></div>
+            <p>
+              At <strong class="machine-name">avado</strong>, choose Edit route settings. Tick
+              <button type="button" class="copy" data-copy="172.33.0.0/16">172.33.0.0/16</button> and Use as exit node.
+            </p>
+            <a class="button ghost" href="https://login.tailscale.com/admin/machines" target="_blank" rel="noopener noreferrer">Open Machines</a>
+            <p class="muted small">
+              Your Tailscale devices can then also reach the AVADO's login. If its password is still avado, change it
+              (<a href="#more-password" id="password-how">how</a>).
+            </p>
+          </li>
+          <li id="step-3">
+            <div class="step-head"><span class="step-title">Add the AVADO as DNS</span><span class="tick" id="tick-3"></span></div>
+            <p>
+              Add nameserver → Custom:
+              <button type="button" class="copy" data-copy="172.33.1.2">172.33.1.2</button>. Turn on Override DNS servers.
+            </p>
+            <a class="button ghost" href="https://login.tailscale.com/admin/dns" target="_blank" rel="noopener noreferrer">Open DNS</a>
+          </li>
+          <li id="step-4">
+            <div class="step-head"><span class="step-title">Connect your phone or laptop</span><span class="tick" id="tick-4"></span></div>
+            <p>Install Tailscale, log in with the same account, press Connect.</p>
+            <a class="button ghost" href="https://tailscale.com/download" target="_blank" rel="noopener noreferrer">Get the app</a>
+          </li>
+          <li id="step-5">
+            <div class="step-head"><span class="step-title">Open my.ava.do</span></div>
+            <a class="button ghost" href="http://my.ava.do" target="_blank" rel="noopener noreferrer">Open my.ava.do</a>
+          </li>
+        </ol>
+        <p class="muted small" id="expiry-tip" hidden></p>
+      </section>
+
+      <details class="card more" id="more">
+        <summary>More options</summary>
+
+        <div class="more-item">
+          <h3>Log in with a link instead of a key</h3>
+          <div class="actions"><button type="button" class="button ghost" id="login">Show a login link</button></div>
+          <div class="login-link" id="login-link" hidden>
+            <p><a id="auth-url" href="#" target="_blank" rel="noopener noreferrer">Open the Tailscale login page</a> or scan the code with your phone.</p>
+            <img id="qr" alt="QR code of the Tailscale login link" width="200" height="200" />
+            <p class="muted small">Only you should open it: whoever logs in adds this AVADO to their Tailscale.</p>
+          </div>
+        </div>
+
+        <div class="more-item">
+          <h3>DNS only for my.ava.do</h3>
+          <p class="muted small">
+            Instead of Override DNS servers, you can switch on Restrict to domain and enter <span class="mono">my.ava.do</span>. Your devices then
+            keep their own DNS for everything else.
+          </p>
+        </div>
+
+        <div class="more-item">
+          <h3>Linux computers</h3>
+          <p class="muted small">Connect with <span class="mono">sudo tailscale up --accept-routes</span>.</p>
+        </div>
+
+        <div class="more-item">
+          <h3>Two AVADOs in one Tailscale account</h3>
+          <p class="muted small">
+            Both offer the same addresses, so only one works at a time. In Machines, untick the routes of the AVADO you do not need from afar.
+          </p>
+        </div>
+
+        <div class="more-item" id="more-password">
+          <h3>Who can reach this AVADO</h3>
+          <p class="muted small">
+            Every device in your Tailscale account, the same as a device at home, including the AVADO's login (SSH). Add only your own devices.
+          </p>
+          <p class="muted small">
+            To change the AVADO's password (it starts as avado): on a computer with Tailscale on, open a terminal and type
+            <span class="mono">ssh avado@172.33.0.1</span>. Log in with the current password, type <span class="mono">passwd</span> and choose a new
+            one. Keep it safe: AVADO support asks for it when they help you. Not sure? Write to support@ava.do.
+          </p>
+        </div>
+
+        <div class="more-item" id="mcp-card" hidden>
+          <h3>AI Connect through Tailscale</h3>
+          <p class="muted small">Your AI assistant can reach AVADO AI Connect at a secure address. It still needs one of your AI Connect keys.</p>
+          <label class="check"><input type="checkbox" id="share-toggle" /> Make AI Connect reachable from my Tailscale devices</label>
+          <p class="mono small" id="mcp-url" hidden></p>
+          <label class="check"><input type="checkbox" id="funnel-toggle" /> Share AI Connect on the internet (for ChatGPT and Claude on the web)</label>
+          <p class="muted small">
+            This gives only AI Connect's door a public address; only someone with one of your AI Connect keys gets in. Your Admin and apps stay
+            private. Switch it off when you do not need it.
+          </p>
+        </div>
+
+        <div class="more-item" id="logout-card" hidden>
+          <h3>Disconnect</h3>
+          <p class="muted small">Removes this AVADO from your Tailscale. You can connect it again at any time.</p>
+          <div class="actions"><button type="button" class="button ghost" id="logout">Log out of Tailscale</button></div>
+        </div>
+      </details>
+
+      <p class="privacy">Tailscale connects your devices directly and encrypts the traffic. It does not pass through AVADO.</p>
+    </main>
+  </body>
+</html>

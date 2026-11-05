@@ -1,0 +1,21 @@
+version: '3.4'
+services:
+  tailscale.avado.dnp.dappnode.eth:
+    image: 'tailscale.avado.dnp.dappnode.eth:0.1.0'
+    build:
+      context: .
+      dockerfile: build/Dockerfile
+    volumes:
+      - 'tailscale:/data'
+      - '/dev/net/tun:/dev/net/tun'
+    environment:
+      - TS_AUTHKEY=
+      - TS_ROUTES=172.33.0.0/16
+      - TS_EXTRA_ARGS=--advertise-exit-node
+      - TS_DEBUG_FIREWALL_MODE=auto
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    restart: always
+volumes:
+  tailscale: {}

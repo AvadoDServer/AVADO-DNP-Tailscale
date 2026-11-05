@@ -1,0 +1,51 @@
+{
+  "name": "tailscale.avado.dnp.dappnode.eth",
+  "version": "0.1.0",
+  "title": "Tailscale",
+  "description": "Reach your whole AVADO from your phone or laptop wherever you are, with your own free Tailscale account: the AVADO Admin at my.ava.do and every app open just like at home. Paste a reusable Tailscale auth key when you install, then follow the short checklist on the app's page. AVADO Remote Access keeps working as before. Your AI assistant can also reach AVADO AI Connect through Tailscale.",
+  "shortDescription": "Free private access to your whole AVADO with your own Tailscale account",
+  "type": "service",
+  "avadocategory": "thelab",
+  "autoupdate": true,
+  "image": {
+    "volumes": [
+      "tailscale:/data",
+      "/dev/net/tun:/dev/net/tun"
+    ],
+    "environment": [
+      "TS_AUTHKEY=",
+      "TS_ROUTES=172.33.0.0/16",
+      "TS_EXTRA_ARGS=--advertise-exit-node",
+      "TS_DEBUG_FIREWALL_MODE=auto"
+    ],
+    "ports": [],
+    "restart": "always",
+    "cap_add": [
+      "NET_ADMIN",
+      "SYS_MODULE"
+    ]
+  },
+  "author": "AVADO",
+  "license": "GPL-3.0",
+  "dependencies": {},
+  "links": {
+    "OnboardingWizard": "http://tailscale.my.ava.do",
+    "HomePage": "https://tailscale.com"
+  },
+  "setupWizard": {
+    "version": "2",
+    "fields": [
+      {
+        "id": "TS_AUTHKEY",
+        "target": {
+          "type": "environment",
+          "name": "TS_AUTHKEY"
+        },
+        "title": "Tailscale auth key",
+        "description": "Make a reusable key in your [Tailscale settings](https://login.tailscale.com/admin/settings/keys) and paste it here. You can also leave it empty and sign in on the app's page later.",
+        "secret": true,
+        "required": false
+      }
+    ]
+  }
+}
