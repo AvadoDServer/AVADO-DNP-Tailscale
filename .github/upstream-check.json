@@ -14,6 +14,10 @@
         {
           "file": "build/Dockerfile",
           "text": "ARG TAILSCALE_IMAGE=tailscale/tailscale:v{version}@sha256:{tailscale}"
+        },
+        {
+          "file": "dappnode_package.json",
+          "text": "\"upstream\": \"v{version}\""
         }
       ]
     }

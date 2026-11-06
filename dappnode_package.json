@@ -1,6 +1,7 @@
 {
   "name": "tailscale.avado.dnp.dappnode.eth",
   "version": "0.2.1",
+  "upstream": "v1.104.4",
   "title": "Tailscale",
   "description": "Reach your whole AVADO from your phone or laptop wherever you are, with your own free Tailscale account: the AVADO Admin at my.ava.do and every app open just like at home. Paste a reusable Tailscale auth key when you install, then follow the short checklist on the app's page. AVADO Remote Access keeps working as before. Your AI assistant can also reach AVADO AI Connect through Tailscale.",
   "shortDescription": "Free private access to your whole AVADO with your own Tailscale account",
